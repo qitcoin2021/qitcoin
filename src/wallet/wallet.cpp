@@ -2673,20 +2673,22 @@ CWallet::Balance CWallet::GetBalance(const int min_depth, bool avoid_reuse) cons
             const int tx_depth{wtx.GetDepthInMainChain(*locked_chain)};
             const CAmount tx_credit_mine{wtx.GetAvailableCredit(*locked_chain, /* fUseCache */ true, ISMINE_SPENDABLE | reuse_filter)};
             const CAmount tx_credit_watchonly{wtx.GetAvailableCredit(*locked_chain, /* fUseCache */ true, ISMINE_WATCH_ONLY | reuse_filter)};
+            const CAmount tx_frozen_mine{wtx.GetAvailableCredit(*locked_chain, /* fUseCache */ true, ISMINE_FROZEN | ISMINE_SPENDABLE)};
+            const CAmount tx_frozen_watchonly{wtx.GetAvailableCredit(*locked_chain, /* fUseCache */ true, ISMINE_FROZEN | ISMINE_WATCH_ONLY)};
             if (is_trusted && tx_depth >= min_depth) {
-                ret.m_mine_trusted += tx_credit_mine;
-                ret.m_watchonly_trusted += tx_credit_watchonly;
+                ret.m_mine_trusted += tx_credit_mine - tx_frozen_mine;
+                ret.m_watchonly_trusted += tx_credit_watchonly - tx_frozen_watchonly;
             }
             if (!is_trusted && tx_depth == 0 && wtx.InMempool()) {
-                ret.m_mine_untrusted_pending += tx_credit_mine;
-                ret.m_watchonly_untrusted_pending += tx_credit_watchonly;
+                ret.m_mine_untrusted_pending += tx_credit_mine - tx_frozen_mine;
+                ret.m_watchonly_untrusted_pending += tx_credit_watchonly - tx_frozen_watchonly;
             }
             ret.m_mine_immature += wtx.GetImmatureCredit(*locked_chain);
             ret.m_watchonly_immature += wtx.GetImmatureWatchOnlyCredit(*locked_chain);
 
             //! for Qitcoin
-            ret.m_mine_frozen += wtx.GetAvailableCredit(*locked_chain, /* fUseCache */ true, ISMINE_FROZEN | ISMINE_SPENDABLE);
-            ret.m_watchonly_frozen += wtx.GetAvailableCredit(*locked_chain, /* fUseCache */ true, ISMINE_FROZEN | ISMINE_WATCH_ONLY);
+            ret.m_mine_frozen += tx_frozen_mine;
+            ret.m_watchonly_frozen += tx_frozen_watchonly;
             ret.m_mine_point_received += wtx.GetAvailableCredit(*locked_chain, /* fUseCache */ true, ISMINE_POINT | ISMINE_SPENDABLE);
             ret.m_mine_staking_received += wtx.GetAvailableCredit(*locked_chain, /* fUseCache */ true, ISMINE_STAKING | ISMINE_SPENDABLE);
             ret.m_watchonly_point_received += wtx.GetAvailableCredit(*locked_chain, /* fUseCache */ true, ISMINE_POINT | ISMINE_WATCH_ONLY);
