@@ -103,6 +103,8 @@ Result CreateBindPlotterTransaction(CWallet* wallet, const CTxDestination &dest,
     // Create special coin control for bind plotter
     CCoinControl realCoinControl = coin_control;
     realCoinControl.destChange = dest;
+    // Fix fee for bind plotter
+    realCoinControl.m_min_txfee = COIN / 100;
     // Calculate bind transaction fee
     if (CAmount punishmentReward = wallet->chain().getBindPlotterPunishment(nSpendHeight, plotterId).first) { // Calculate bind transaction fee
         realCoinControl.m_min_txfee = std::max(realCoinControl.m_min_txfee, punishmentReward);
@@ -224,7 +226,7 @@ Result CreateUnfreezeTransaction(CWallet* wallet, const COutPoint& outpoint,
         return Result::INVALID_REQUEST;
     }
 
-    // Check unbind limit
+    // Check limit
     if (coin.IsBindPlotter()) {
         int nSpendHeight = locked_chain->getHeight().get_value_or(0) + 1;
         int nActiveHeight = wallet->chain().getUnbindPlotterLimitHeight(CBindPlotterInfo(targetOutpoint, coin));
@@ -235,6 +237,29 @@ Result CreateUnfreezeTransaction(CWallet* wallet, const COutPoint& outpoint,
                     (nActiveHeight - nSpendHeight) * Params().GetConsensus().nPowTargetSpacing / 60));
             return Result::WALLET_ERROR;
         }
+    } else if (coin.IsPoint()) {
+        int nSpendHeight = locked_chain->getHeight().get_value_or(0) + 1;
+        int nActiveHeight = coin.nHeight + PointPayload::As(coin.payload)->GetLockBlocks();
+        if (nSpendHeight < nActiveHeight) {
+            errors.push_back(strprintf("Withdraw point active on %d block height (%d blocks after, about %d minute)",
+                    nActiveHeight,
+                    nActiveHeight - nSpendHeight,
+                    (nActiveHeight - nSpendHeight) * Params().GetConsensus().nPowTargetSpacing / 60));
+            return Result::WALLET_ERROR;
+        }
+    } else if (coin.IsStaking()) {
+        int nSpendHeight = locked_chain->getHeight().get_value_or(0) + 1;
+        int nActiveHeight = coin.nHeight + StakingPayload::As(coin.payload)->GetLockBlocks();
+        if (nSpendHeight < nActiveHeight) {
+            errors.push_back(strprintf("Withdraw staking active on %d block height (%d blocks after, about %d minute)",
+                    nActiveHeight,
+                    nActiveHeight - nSpendHeight,
+                    (nActiveHeight - nSpendHeight) * Params().GetConsensus().nPowTargetSpacing / 60));
+            return Result::WALLET_ERROR;
+        }
+    } else {
+        errors.push_back("Can't unfreeze");
+        return Result::INVALID_REQUEST;
     }
 
     // Create transaction
