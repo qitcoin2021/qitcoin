@@ -162,13 +162,14 @@ BITCOIN_CORE_H = \
   noui.h \
   optional.h \
   outputtype.h \
-  poc/passphrase.h \
+  pos/bls.h \
   poc/poc.h \
   policy/feerate.h \
   policy/fees.h \
   policy/policy.h \
   policy/rbf.h \
   policy/settings.h \
+  pos/pos.h \
   protocol.h \
   psbt.h \
   random.h \
@@ -206,6 +207,8 @@ BITCOIN_CORE_H = \
   ui_interface.h \
   undo.h \
   util/bip32.h \
+  util/bip39.h \
+  util/bip39/wordlist.h \
   util/bytevectorhash.h \
   util/error.h \
   util/fees.h \
@@ -288,12 +291,13 @@ libbitcoin_server_a_SOURCES = \
   node/psbt.cpp \
   node/transaction.cpp \
   noui.cpp \
-  poc/passphrase-en.cpp \
-  poc/poc.cpp \
+  poc/poc_chain.cpp \
   poc/poc_rpc.cpp \
   policy/fees.cpp \
   policy/rbf.cpp \
   policy/settings.cpp \
+  pos/pos_chain.cpp \
+  pos/pos_rpc.cpp \
   rest.cpp \
   rpc/blockchain.cpp \
   rpc/mining.cpp \
@@ -523,7 +527,11 @@ libbitcoin_util_a_SOURCES = \
   support/cleanse.cpp \
   sync.cpp \
   threadinterrupt.cpp \
+  poc/poc_api.cpp \
+  pos/pos_api.cpp \
   util/bip32.cpp \
+  util/bip39.cpp \
+  util/bip39/wordlist_english.cpp \
   util/bytevectorhash.cpp \
   util/error.cpp \
   util/fees.cpp \

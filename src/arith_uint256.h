@@ -287,4 +287,19 @@ public:
 uint256 ArithToUint256(const arith_uint256 &);
 arith_uint256 UintToArith256(const uint256 &);
 
+/** 1024-bit unsigned big integer. */
+class arith_uint1024 : public base_uint<1024> {
+public:
+    arith_uint1024() {}
+    arith_uint1024(const base_uint<1024>& b) : base_uint<1024>(b) {}
+    arith_uint1024(uint64_t b) : base_uint<1024>(b) {}
+    explicit arith_uint1024(const std::string& str) : base_uint<1024>(str) {}
+
+    friend arith_uint1024 UintToArith1024(const uint256 &);
+    friend arith_uint1024 UintToArith1024BE(const uint256 &);
+};
+
+arith_uint1024 UintToArith1024(const uint256 &);
+arith_uint1024 UintToArith1024BE(const uint256 &);
+
 #endif // BITCOIN_ARITH_UINT256_H

@@ -7,9 +7,9 @@
 #include <consensus/validation.h>
 #include <key_io.h>
 #include <net.h>
-#include <poc/passphrase.h>
 #include <rpc/protocol.h>
 #include <rpc/server.h>
+#include <util/bip39.h>
 #include <util/strencodings.h>
 #include <univalue.h>
 #include <validation.h>
@@ -17,7 +17,7 @@
 #include <iomanip>
 #include <sstream>
 
-static UniValue getMiningInfo(const JSONRPCRequest& request)
+static UniValue poc_getMiningInfo(const JSONRPCRequest& request)
 {
     if (request.fHelp) {
         throw std::runtime_error(
@@ -36,35 +36,35 @@ static UniValue getMiningInfo(const JSONRPCRequest& request)
     UniValue result(UniValue::VOBJ);
 
     LOCK(cs_main);
-    const CBlockIndex *pindexLast = ChainActive().Tip();
-    if (pindexLast == nullptr || pindexLast->nHeight < 1) {
+    const CBlockIndex *pindexMining = ChainActive().Tip();
+    if (pindexMining == nullptr || pindexMining->nHeight < 1) {
         result.pushKV("result", "error");
         result.pushKV("errorCode", "400");
         result.pushKV("errorDescription", "Block chain tip is empty!");
         return result;
     }
-    if (pindexLast->nHeight != 1 && ChainstateActive().IsInitialBlockDownload()) {
+    if (pindexMining->nHeight != 1 && ChainstateActive().IsInitialBlockDownload()) {
         result.pushKV("result", "error");
         result.pushKV("errorCode", "400");
         result.pushKV("errorDescription", "Is initial block downloading!");
         return result;
     }
-    if (pindexLast->nHeight == 1 && Params().GetConsensus().nBeginMiningTime > GetTime()) {
+    if (pindexMining->nHeight == 1 && Params().GetConsensus().nBeginMiningTime > GetTime()) {
         result.pushKV("result", "error");
         result.pushKV("errorCode", "400");
         result.pushKV("errorDescription", "Waiting for begining!");
         return result;
     }
 
-    result.pushKV("height", pindexLast->nHeight + 1);
-    result.pushKV("generationSignature", HexStr(pindexLast->GetNextGenerationSignature()));
-    result.pushKV("baseTarget", std::to_string(pindexLast->nBaseTarget));
+    result.pushKV("height", pindexMining->nHeight + 1);
+    result.pushKV("generationSignature", HexStr(pindexMining->GetNextGenerationSignature()));
+    result.pushKV("baseTarget", std::to_string(pindexMining->nBaseTarget));
     result.pushKV("targetDeadline", (uint64_t) poc::MAX_TARGET_DEADLINE);
 
     return result;
 }
 
-static UniValue submitNonce(const JSONRPCRequest& request)
+static UniValue poc_submitNonce(const JSONRPCRequest& request)
 {
     if (request.fHelp || request.params.size() < 2 || request.params.size() > 5) {
         throw std::runtime_error(
@@ -201,7 +201,7 @@ static UniValue getPlotterId(const JSONRPCRequest& request)
         );
     }
 
-    return PocLegacy::GeneratePlotterId(request.params[0].get_str());;
+    return poc::GeneratePlotterId(request.params[0].get_str());;
 }
 
 static UniValue getNewPlotter(const JSONRPCRequest& request)
@@ -218,8 +218,8 @@ static UniValue getNewPlotter(const JSONRPCRequest& request)
         );
     }
 
-    std::string passphrase = poc::generatePassphrase();
-    uint64_t plotterID = PocLegacy::GeneratePlotterId(passphrase);
+    auto passphrase = BIP39_JoinMnemonic(BIP39_GenMnemonic(12));
+    uint64_t plotterID = poc::GeneratePlotterId(passphrase);
 
     UniValue result(UniValue::VOBJ);
     result.pushKV("passphrase", passphrase);
@@ -236,8 +236,8 @@ static const CRPCCommand commands[] =
     { "poc",                "getnewplotter",          &getNewPlotter,         { } },
 
     //! Burst mining compatible
-    { "hidden",             "getMiningInfo",          &getMiningInfo,         { } },
-    { "hidden",             "submitNonce",            &submitNonce,           { "nonce", "plotterId", "height", "address", "checkBind" } },
+    { "hidden",             "getMiningInfo",          &poc_getMiningInfo,     { } },
+    { "hidden",             "submitNonce",            &poc_submitNonce,       { "nonce", "plotterId", "height", "address", "checkBind" } },
 };
 
 void RegisterPoCRPCCommands(CRPCTable &t)

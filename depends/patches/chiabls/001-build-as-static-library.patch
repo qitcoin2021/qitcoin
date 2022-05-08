@@ -1,0 +1,97 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 6922167..1e81938 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -12,6 +12,29 @@ if(NOT CMAKE_BUILD_TYPE)
+   )
+ endif()
+ 
++# Cross compile
++IF(TOOLCHAIN_PREFIX)
++  SET(CMAKE_C_COMPILER   "${TOOLCHAIN_PREFIX}-gcc")
++  SET(CMAKE_CXX_COMPILER "${TOOLCHAIN_PREFIX}-g++")
++  SET(CMAKE_AS           "${TOOLCHAIN_PREFIX}-as")
++  SET(CMAKE_AR           "${TOOLCHAIN_PREFIX}-ar")
++  SET(CMAKE_NM           "${TOOLCHAIN_PREFIX}-nm")
++  SET(CMAKE_RANLIB       "${TOOLCHAIN_PREFIX}-ranlib")
++  SET(CMAKE_LD           "${TOOLCHAIN_PREFIX}-ld")
++  SET(CMAKE_STRIP        "${TOOLCHAIN_PREFIX}-strip")
++
++  SET(CMAKE_DISABLE_FIND_PACKAGE_gmp 1)
++  SET(CMAKE_DISABLE_FIND_PACKAGE_sodium 1)
++ENDIF()
++
++# Require set CMAKE_SYSTEM_NAME=Windows for mingw
++IF(TOOLCHAIN_PREFIX STREQUAL x86_64-w64-mingw32 OR TOOLCHAIN_PREFIX STREQUAL i686-w64-mingw32)
++  IF(NOT CMAKE_SYSTEM_NAME STREQUAL Windows)
++    message(STATUS "Please add '-DCMAKE_SYSTEM_NAME=Windows' to cmake commandline on use mingw32 and mingw64!")
++    SET(CMAKE_SYSTEM_NAME "Windows")
++  ENDIF()
++ENDIF()
++
+ project(BLS)
+ 
+ set(BUILD_BLS_PYTHON_BINDINGS "1" CACHE STRING "")
+@@ -40,6 +63,8 @@ set(SODIUM_PCH "on" CACHE STRING "")
+ set(SODIUM_DISABLE_TESTS "on" CACHE STRING "")
+ set(SODIUM_CHIA_MINIMAL "on" CACHE STRING "")
+ FetchContent_MakeAvailable(Sodium)
++install(TARGETS sodium EXPORT sodium DESTINATION lib)
++install(DIRECTORY ${sodium_SOURCE_DIR}/libsodium/src/libsodium/include/ DESTINATION include/chiabls)
+ 
+ if (DEFINED ENV{RELIC_MAIN})
+   set(RELIC_GIT_TAG "origin/main")
+@@ -50,22 +75,23 @@ endif ()
+ 
+ message(STATUS "Relic will be built from: ${RELIC_GIT_TAG}")
+ 
++IF (EXISTS "${FETCHCONTENT_CACHE_DIR}/relic-${RELIC_GIT_TAG}.zip")
++FetchContent_Declare(
++  relic
++  URL "${FETCHCONTENT_CACHE_DIR}/relic-${RELIC_GIT_TAG}.zip"
++  URL_HASH SHA256=d23b9488051a44deffe36df24f379a6ff259be68d7358c0ae8c43dd2ef019bd8
++)
++ELSE()
+ FetchContent_Declare(
+   relic
+   GIT_REPOSITORY https://github.com/Chia-Network/relic.git
+   GIT_TAG ${RELIC_GIT_TAG}
+ )
++ENDIF()
+ 
+ # Relic related options
+ 
+-set(STBIN TRUE)
+-find_package(gmp)
+-if (GMP_FOUND)
+-  message(STATUS "Found libgmp")
+-  set(ARITH "gmp" CACHE STRING "")
+-else()
+-  set(ARITH "easy" CACHE STRING "")
+-endif()
++set(ARITH "easy" CACHE STRING "")
+ 
+ if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+   set(WSIZE "32" CACHE STRING "Relic - Processor word size")
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index e10cb8f..cff036b 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -2,7 +2,7 @@
+ file(GLOB HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/*.hpp)
+ source_group("SrcHeaders" FILES ${HEADERS})
+ 
+-add_library(bls
++add_library(bls STATIC
+   ${HEADERS}
+   ${CMAKE_CURRENT_SOURCE_DIR}/privatekey.cpp
+   ${CMAKE_CURRENT_SOURCE_DIR}/bls.cpp
+@@ -19,7 +19,7 @@ target_include_directories(bls
+ )
+ 
+ target_compile_definitions(bls
+-  PRIVATE
++  PUBLIC cxx_std_17
+     BLSALLOC_SODIUM=1
+ )
+ 

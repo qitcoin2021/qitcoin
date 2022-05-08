@@ -129,6 +129,8 @@ enum BlockStatus: uint32_t {
     BLOCK_FAILED_MASK        =   BLOCK_FAILED_VALID | BLOCK_FAILED_CHILD,
 
     BLOCK_OPT_WITNESS        =  128, //!< block data in blk*.data was received with a witness-enforcing client
+
+    BLOCK_HAVE_POS          =   256, //!< include PoS data
 };
 
 /** The block chain is a tree shaped structure starting with the
@@ -185,6 +187,7 @@ public:
     uint64_t nBaseTarget;
     uint64_t nNonce;
     uint64_t nPlotterId;
+    CProofOfSpace pos;
     std::vector<unsigned char> vchPubKey;
     std::vector<unsigned char> vchSignature;
 
@@ -226,6 +229,7 @@ public:
         nBaseTarget    = 0;
         nNonce         = 0;
         nPlotterId     = 0;
+        pos.SetNull();
         vchPubKey.clear();
         vchSignature.clear();
     }
@@ -245,6 +249,7 @@ public:
         nBaseTarget    = block.nBaseTarget;
         nNonce         = block.nNonce;
         nPlotterId     = block.nPlotterId;
+        pos            = block.pos;
         vchPubKey      = block.vchPubKey;
         vchSignature   = block.vchSignature;
     }
@@ -278,6 +283,7 @@ public:
         block.nBaseTarget    = nBaseTarget;
         block.nNonce         = nNonce;
         block.nPlotterId     = nPlotterId;
+        block.pos            = pos;
         block.vchPubKey      = vchPubKey;
         block.vchSignature   = vchSignature;
         return block;
@@ -426,6 +432,8 @@ public:
         READWRITE(nBaseTarget);
         READWRITE(nNonce);
         READWRITE(nPlotterId);
+        if (nStatus & BLOCK_HAVE_POS)
+            READWRITE(pos);
         READWRITE(LIMITED_VECTOR(vchPubKey, CPubKey::COMPRESSED_PUBLIC_KEY_SIZE));
         READWRITE(LIMITED_VECTOR(vchSignature, CPubKey::SIGNATURE_SIZE));
     }
@@ -440,6 +448,7 @@ public:
         block.nBaseTarget     = nBaseTarget;
         block.nNonce          = nNonce;
         block.nPlotterId      = nPlotterId;
+        block.pos             = pos;
         block.vchPubKey       = vchPubKey;
         block.vchSignature    = vchSignature;
         return block.GetHash();

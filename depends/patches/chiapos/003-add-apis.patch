@@ -1,0 +1,63 @@
+diff --git a/include/api.h b/include/api.h
+new file mode 100644
+index 0000000..d0fc5a1
+--- /dev/null
++++ b/include/api.h
+@@ -0,0 +1,21 @@
++#ifndef VERIFIER_H_
++#define VERIFIER_H_
++
++#include <stdint.h>
++#include <vector>
++
++namespace chiapos {
++
++typedef std::vector<unsigned char> Bytes;
++
++// Validates a proof of space, and returns the quality string if the proof is valid for the
++// given k and challenge. If the proof is invalid, it returns an empty Bytes().
++Bytes ValidateProof(
++    const Bytes& id,
++    uint8_t k,
++    const Bytes& challenge,
++    const Bytes& proof);
++
++}
++
++#endif  // VERIFIER_H_
+diff --git a/src/api.cpp b/src/api.cpp
+new file mode 100644
+index 0000000..75e9fc0
+--- /dev/null
++++ b/src/api.cpp
+@@ -0,0 +1,29 @@
++#include "api.h"
++
++#include "prover_disk.hpp"
++#include "verifier.hpp"
++
++namespace chiapos {
++
++Bytes ValidateProof(
++    const Bytes& id,
++    uint8_t k,
++    const Bytes& challenge,
++    const Bytes& proof)
++{
++    if (id.size() != 32 || challenge.size() != 32 || proof.empty())
++        return Bytes();
++
++    LargeBits quality = Verifier().ValidateProof(
++        &id[0], k, &challenge[0],
++        &proof[0], static_cast<uint16_t>(proof.size()));
++    if (quality.GetSize() == 0)
++        return Bytes();
++
++    Bytes vchQuality;
++    vchQuality.resize(32);
++    quality.ToBytes(&vchQuality[0]);
++    return vchQuality;
++}
++
++}
+\ No newline at end of file

@@ -6,12 +6,14 @@
 #ifndef BITCOIN_SCRIPT_STANDARD_H
 #define BITCOIN_SCRIPT_STANDARD_H
 
+#include <pos/bls.h>
 #include <script/interpreter.h>
 #include <uint256.h>
 
 #include <boost/variant.hpp>
 
 #include <stdint.h>
+#include <map>
 #include <memory>
 #include <set>
 
@@ -328,7 +330,8 @@ static const int PROTOCOL_BINDPLOTTER_DEFAULTMAXALIVE = 24;
 static const int PROTOCOL_BINDPLOTTER_MAXALIVE = 288 * 7;
 
 /** The bind plotter script size */
-static const int PROTOCOL_BINDPLOTTER_SCRIPTSIZE = 108;
+static const int PROTOCOL_BINDPLOTTER_POC_SCRIPTSIZE = 108;
+static const int PROTOCOL_BINDPLOTTER_POS_SCRIPTSIZE = 157;
 
 /** Check whether a string is a valid passphrase. */
 bool IsValidPassphrase(const std::string& passphrase);
@@ -339,6 +342,9 @@ bool IsValidPlotterID(const std::string& strPlotterId, uint64_t *id = nullptr);
 /** Generate a bind plotter script. */
 CScript GetBindPlotterScriptForDestination(const CTxDestination& dest, const std::string& passphrase, int lastActiveHeight);
 
+/** Generate a bind plotter script. */
+CScript GetBindPlotterScriptForDestination(const CTxDestination& dest, const bls::PrivateKey& farmerPrivateKey, int lastActiveHeight);
+
 /** Check bind plotter script. */
 bool IsBindPlotterScript(const CScript &script);
 
@@ -347,7 +353,8 @@ class CKey;
 CScript SignBindPlotterScript(const CScript &script, const CKey &key);
 
 /** Decode bind plotter script. */
-bool DecodeBindPlotterScript(const CScript &script, uint64_t& plotterId, std::string& pubkeyHex, std::string& signatureHex, int& lastActiveHeight);
+bool DecodeBindPlotterScript(const CScript &script, uint64_t& plotterId, std::string& pubkeyHex, int& lastActiveHeight);
+bool DecodeBindPlotterScript(const CScript &script, std::map<std::string,std::string> &info);
 uint64_t GetBindPlotterIdFromScript(const CScript &script);
 
 /** The minimal point amount */
@@ -373,6 +380,6 @@ CScript GetStakingScriptForDestination(const CTxDestination& dest, int lockBlock
 CAmount GetStakingAmount(CAmount amount, int lockBlocks);
 
 /** Parse transaction output payload. */
-CTxOutPayloadRef ExtractTxoutPayload(const CTxOut& txout, int nHeight = 0, const std::set<TxOutType>& filters = {}, bool for_test = false);
+CTxOutPayloadRef ExtractTxoutPayload(const CTxOut& txout, int nHeight = 0, const std::set<TxOutType>& filters = {}, bool for_test = false, std::map<std::string,std::string> *pinfo = nullptr);
 
 #endif // BITCOIN_SCRIPT_STANDARD_H

@@ -2737,6 +2737,10 @@ Note:  Since the fee is calculated on a per-byte basis, a fee of "100 satoshis p
         <translation>有効時間(&amp;A):</translation>
     </message>
     <message>
+        <source>&amp;Bind Type:</source>
+        <translation>タイプ(&amp;B):</translation>
+    </message>
+    <message>
         <source>&amp;Lock Blocks:</source>
         <translation>ロック時間(&amp;L):</translation>
     </message>

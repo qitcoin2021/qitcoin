@@ -977,6 +977,7 @@ bool CBlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, 
                 pindexNew->nStatus            = diskindex.nStatus;
                 pindexNew->nTx                = diskindex.nTx;
                 pindexNew->minerRewardTxOut   = diskindex.minerRewardTxOut;
+                pindexNew->pos                = diskindex.pos;
                 pindexNew->vchPubKey          = diskindex.vchPubKey;
                 pindexNew->vchSignature       = diskindex.vchSignature;
                 pcursor->Next();

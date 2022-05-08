@@ -16,6 +16,7 @@
 #include <net.h>
 #include <poc/poc.h>
 #include <policy/fees.h>
+#include <pos/pos.h>
 #include <rpc/blockchain.h>
 #include <rpc/server.h>
 #include <rpc/util.h>
@@ -58,9 +59,10 @@ static UniValue generateBlocks(const CScript& coinbase_script, const std::shared
     while (nHeight < nHeightEnd && !ShutdownRequested())
     {
         uint64_t nDeadline = static_cast<uint64_t>(Params().GetConsensus().nPowTargetSpacing);
-        if (nHeight <= 1)
+        if (nHeight <= 1) {
             nDeadline = 0;
-        std::unique_ptr<CBlockTemplate> pblocktemplate(BlockAssembler(Params()).CreateNewBlock(coinbase_script, nPlotterId, nDeadline, nDeadline, private_key));
+        }
+        std::unique_ptr<CBlockTemplate> pblocktemplate(BlockAssembler(Params()).CreateNewBlock(coinbase_script, CProofOfSpace(), nPlotterId, nDeadline, nDeadline, private_key));
         if (!pblocktemplate.get())
             throw JSONRPCError(RPC_INTERNAL_ERROR, "Couldn't create new block");
         CBlock *pblock = &pblocktemplate->block;
@@ -1179,7 +1181,21 @@ static UniValue createbindplotterdata(const JSONRPCRequest& request)
     if (lastActiveHeight > activeHeight + PROTOCOL_BINDPLOTTER_DEFAULTMAXALIVE)
         throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Last active height too large and unsafe (limit %d)", activeHeight + PROTOCOL_BINDPLOTTER_DEFAULTMAXALIVE));
 
-    CScript script = GetBindPlotterScriptForDestination(DecodeDestination(request.params[0].get_str()), request.params[1].get_str(), lastActiveHeight);
+    auto bindToDest = DecodeDestination(request.params[0].get_str());
+    auto passphrase = request.params[1].get_str();
+
+    CScript script;
+    if (passphrase.find("pos:") == 0) {
+        // use passphrase for PoS
+        auto farmerPrivateKey = pos::DeriveMasterToFarmer(pos::GeneratePrivateKey(passphrase.substr(4)));
+        script = GetBindPlotterScriptForDestination(bindToDest, farmerPrivateKey, lastActiveHeight);
+    } else if (passphrase.find("poc:") == 0) {
+        // use passphrase for PoC
+        script = GetBindPlotterScriptForDestination(bindToDest, passphrase.substr(4), lastActiveHeight);
+    } else {
+        // use passphrase for PoC
+        script = GetBindPlotterScriptForDestination(bindToDest, passphrase, lastActiveHeight);
+    }
     if (script.empty())
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Cannot generate bind script");
 
@@ -1212,17 +1228,14 @@ static UniValue decodebindplotterdata(const JSONRPCRequest& request)
 
     std::vector<unsigned char> bindData = ParseHex(request.params[0].get_str());
 
-    uint64_t plotterId = 0;
-    std::string pubkeyHex, signatureHex;
-    int lastActiveHeight = 0;
-    if (!DecodeBindPlotterScript(CScript(bindData.cbegin(), bindData.cend()), plotterId, pubkeyHex, signatureHex, lastActiveHeight))
+    std::map<std::string, std::string> info;
+    if (!DecodeBindPlotterScript(CScript(bindData.cbegin(), bindData.cend()), info))
         throw JSONRPCError(RPC_TYPE_ERROR, "Invalid data");
 
     UniValue result(UniValue::VOBJ);
-    result.pushKV("plotterId", std::to_string(plotterId));
-    result.pushKV("lastActiveHeight", lastActiveHeight);
-    result.pushKV("pubkey", pubkeyHex);
-    result.pushKV("signature", signatureHex);
+    for (auto it = info.begin(); it != info.end(); it++) {
+        result.pushKV(it->first, it->second);
+    }
     return result;
 }
 

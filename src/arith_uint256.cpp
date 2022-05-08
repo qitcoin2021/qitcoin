@@ -7,6 +7,7 @@
 
 #include <uint256.h>
 #include <crypto/common.h>
+#include <util/strencodings.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -164,13 +165,41 @@ double base_uint<BITS>::getdouble() const
 template <unsigned int BITS>
 std::string base_uint<BITS>::GetHex() const
 {
-    return ArithToUint256(*this).GetHex();
+    const uint8_t* p1 = (uint8_t*)pn;
+    return HexStr(std::reverse_iterator<const uint8_t*>(p1 + sizeof(pn)), std::reverse_iterator<const uint8_t*>(p1));
 }
 
 template <unsigned int BITS>
 void base_uint<BITS>::SetHex(const char* psz)
 {
-    *this = UintToArith256(uint256S(psz));
+    unsigned char data[WIDTH*4];
+    memset(data, 0, sizeof(data));
+
+    // skip leading spaces
+    while (IsSpace(*psz))
+        psz++;
+
+    // skip 0x
+    if (psz[0] == '0' && ToLower(psz[1]) == 'x')
+        psz += 2;
+
+    // hex string to uint
+    size_t digits = 0;
+    while (::HexDigit(psz[digits]) != -1)
+        digits++;
+    unsigned char* p1 = (unsigned char*)data;
+    unsigned char* pend = p1 + sizeof(data);
+    while (digits > 0 && p1 < pend) {
+        *p1 = ::HexDigit(psz[--digits]);
+        if (digits > 0) {
+            *p1 |= ((unsigned char)::HexDigit(psz[--digits]) << 4);
+            p1++;
+        }
+    }
+
+    // fill to pn
+    for(int x=0; x<WIDTH; ++x)
+        pn[x] = ReadLE32(data + x*4);
 }
 
 template <unsigned int BITS>
@@ -274,5 +303,38 @@ arith_uint256 UintToArith256(const uint256 &a)
     arith_uint256 b;
     for(int x=0; x<b.WIDTH; ++x)
         b.pn[x] = ReadLE32(a.begin() + x*4);
+    return b;
+}
+
+// Explicit instantiations for base_uint<1024>
+template base_uint<1024>::base_uint(const std::string&);
+template base_uint<1024>& base_uint<1024>::operator<<=(unsigned int);
+template base_uint<1024>& base_uint<1024>::operator>>=(unsigned int);
+template base_uint<1024>& base_uint<1024>::operator*=(uint32_t b32);
+template base_uint<1024>& base_uint<1024>::operator*=(const base_uint<1024>& b);
+template base_uint<1024>& base_uint<1024>::operator/=(const base_uint<1024>& b);
+template uint32_t base_uint<1024>::operator%(uint32_t b32);
+template int base_uint<1024>::CompareTo(const base_uint<1024>&) const;
+template bool base_uint<1024>::EqualTo(uint64_t) const;
+template double base_uint<1024>::getdouble() const;
+template std::string base_uint<1024>::GetHex() const;
+template std::string base_uint<1024>::ToString() const;
+template void base_uint<1024>::SetHex(const char*);
+template void base_uint<1024>::SetHex(const std::string&);
+template unsigned int base_uint<1024>::bits() const;
+
+arith_uint1024 UintToArith1024(const uint256 &a)
+{
+    arith_uint1024 b;
+    for(int x=0; x<a.WIDTH/4; ++x)
+        b.pn[x] = ReadLE32(a.begin() + x*4);
+    return b;
+}
+
+arith_uint1024 UintToArith1024BE(const uint256 &a)
+{
+    arith_uint1024 b;
+    for(int x=0; x<a.WIDTH/4; ++x)
+        b.pn[x] = ReadBE32(a.end() - x*4 - 4);
     return b;
 }

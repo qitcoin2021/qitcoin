@@ -11,6 +11,74 @@
 #include <serialize.h>
 #include <uint256.h>
 
+/** For Chia PoS.
+ */
+class CProofOfSpace
+{
+public:
+    std::vector<unsigned char> vchFarmerPubKey; // fpk[48]
+    std::vector<unsigned char> vchPoolPubKey;  // ppk[48]/pph[32]
+    std::vector<unsigned char> vchLocalPubKey; // local_pk[48]
+    std::vector<unsigned char> vchProof;
+    int32_t nPlotK;
+
+    std::vector<unsigned char> vchSignature; // fk.sign(make(genSign,iterations), plot_pk)[96]
+    int32_t nScanIterations;
+
+    CProofOfSpace()
+    {
+        SetNull();
+    }
+
+    ADD_SERIALIZE_METHODS;
+
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action) {
+        READWRITE(LIMITED_VECTOR(vchFarmerPubKey, 48));
+        READWRITE(LIMITED_VECTOR(vchPoolPubKey, 48)); // max(48, 32)
+        READWRITE(LIMITED_VECTOR(vchLocalPubKey, 48));
+        READWRITE(LIMITED_VECTOR(vchProof, 1024));
+        READWRITE(nPlotK);
+
+        READWRITE(LIMITED_VECTOR(vchSignature, 96));
+        READWRITE(nScanIterations);
+    }
+
+    void SetNull()
+    {
+        vchFarmerPubKey.clear();
+        vchPoolPubKey.clear();
+        vchLocalPubKey.clear();
+        vchProof.clear();
+        nPlotK = 0;
+
+        vchSignature.clear();
+        nScanIterations = 0;
+    }
+
+    bool IsNull() const
+    {
+        return vchFarmerPubKey.empty()
+            && vchPoolPubKey.empty()
+            && vchLocalPubKey.empty()
+            && vchProof.empty()
+            && nPlotK == 0
+            && vchSignature.empty()
+            && nScanIterations == 0;
+    }
+
+    bool IsValid() const
+    {
+        return vchFarmerPubKey.size() == 48
+            && (vchPoolPubKey.size() == 48 || vchPoolPubKey.size() == 32)
+            && vchLocalPubKey.size() == 48
+            && !vchProof.empty()
+            && nPlotK > 0 && nPlotK < 0x7fff
+            && vchSignature.size() == 96
+            && nScanIterations >= 0 && nScanIterations < 0x7fffffff;
+    }
+};
+
 /** Nodes collect new transactions into a block, hash them into a hash tree,
  * and scan through nonce values to make the block's hash satisfy proof-of-work
  * requirements.  When they solve the proof-of-work, they broadcast the block
@@ -27,8 +95,12 @@ public:
     uint256 hashMerkleRoot;
     uint32_t nTime;
     uint64_t nBaseTarget;
-    uint64_t nNonce;
-    uint64_t nPlotterId;
+    uint64_t nNonce;     //! nonce or iterations
+    uint64_t nPlotterId; //! plotter or farmer
+
+    // pos
+    CProofOfSpace pos;
+
     // block signature by generator
     std::vector<unsigned char> vchPubKey;
     std::vector<unsigned char> vchSignature;
@@ -42,9 +114,11 @@ public:
 
     template <typename Stream, typename Operation>
     inline void SerializationOp(Stream& s, Operation ser_action) {
-        // Read: Signature flag and base target read from stream. Real base target require remove mask
-        // Write: Signature flag and base target write to stream
-        uint64_t nFlags = nBaseTarget | (vchPubKey.empty() ? 0 : 0x8000000000000000L);
+        uint64_t nFlags = nBaseTarget & 0x0000ffffffffffffL;
+        // add flags
+        nFlags |= pos.IsNull() ? 0 : 0x4000000000000000L;
+        nFlags |= vchPubKey.empty() ? 0 : 0x8000000000000000L;
+
         READWRITE(this->nVersion);
         READWRITE(hashPrevBlock);
         READWRITE(hashMerkleRoot);
@@ -52,10 +126,20 @@ public:
         READWRITE(nFlags);
         READWRITE(nNonce);
         READWRITE(nPlotterId);
-        nBaseTarget = nFlags & 0x7fffffffffffffffL;
+
+        // remove flags
+        nBaseTarget = nFlags & 0x0000ffffffffffffL;
+
+        // PoS support
+        if (nFlags & 0x4000000000000000L) {
+            READWRITE(pos);
+        }
+
+        // signature support
         if (nFlags & 0x8000000000000000L) {
             READWRITE(LIMITED_VECTOR(vchPubKey, CPubKey::COMPRESSED_PUBLIC_KEY_SIZE));
-            // Signature block data exclude vchSignature
+
+            // Signature raw data exclude vchSignature
             if (!(GetSerializeType(s) & SER_UNSIGNATURED)) {
                 READWRITE(LIMITED_VECTOR(vchSignature, CPubKey::SIGNATURE_SIZE));
             }
@@ -71,6 +155,7 @@ public:
         nBaseTarget = 0;
         nNonce = 0;
         nPlotterId = 0;
+        pos.SetNull();
         vchPubKey.clear();
         vchSignature.clear();
     }
@@ -134,6 +219,7 @@ public:
         block.nBaseTarget    = nBaseTarget;
         block.nNonce         = nNonce;
         block.nPlotterId     = nPlotterId;
+        block.pos            = pos;
         block.vchPubKey      = vchPubKey;
         block.vchSignature   = vchSignature;
         return block;

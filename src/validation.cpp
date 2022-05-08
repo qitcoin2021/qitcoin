@@ -23,6 +23,7 @@
 #include <policy/fees.h>
 #include <policy/policy.h>
 #include <policy/settings.h>
+#include <pos/pos.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
 #include <random.h>
@@ -1299,8 +1300,9 @@ std::vector<CTxOut> GetBlockReward(const CBlockIndex* pindexPrev, const CAmount&
                 vTxOut.push_back(CTxOut((nSubsidy * consensusParams.nPledgeLowRewardRatio) / 1000, CScript()));
             }
 
-            // staking to top 10
-            const CAccountBalanceList vSortedTopAccount = view.GetTopStakingAccounts(10);
+            // staking to top N
+            const int N = (nHeight >= consensusParams.nMercuryActiveHeight) ? 20 : 10;
+            const CAccountBalanceList vSortedTopAccount = view.GetTopStakingAccounts(N);
             if (!vSortedTopAccount.empty()) {
                 CAmount totalBalance = 0;
                 for (auto &acc : vSortedTopAccount) {
@@ -3238,6 +3240,8 @@ CBlockIndex* BlockManager::AddToBlockIndex(const CBlockHeader& block)
     pindexNew->RaiseValidity(BLOCK_VALID_TREE);
     if (pindexBestHeader == nullptr || pindexBestHeader->nChainWork < pindexNew->nChainWork)
         pindexBestHeader = pindexNew;
+    if (!pindexNew->pos.IsNull())
+        pindexNew->nStatus |= BLOCK_HAVE_POS;
     pindexNew->Update(Params().GetConsensus());
 
     setDirtyBlockIndex.insert(pindexNew);
@@ -3394,6 +3398,18 @@ static bool CheckBlockHeader(const CBlockHeader& block, CValidationState& state,
     // Check difficulty
     if (block.nBaseTarget != poc::CalculateBaseTarget(*pindexPrev, block, chainparams.GetConsensus()))
         return state.Invalid(ValidationInvalidReason::BLOCK_INVALID_HEADER, false, REJECT_INVALID, "bad-diff", "incorrect difficulty");
+
+    // PoS
+    if (!block.pos.IsNull()) {
+        if (pindexPrev->nHeight >= chainparams.GetConsensus().nMercuryActiveHeight) {
+            pos::VerifyResult result = pos::VerifyBlockHeader(*pindexPrev, block, chainparams.GetConsensus());
+            if (result != pos::VerifyResult::Success) {
+                return state.Invalid(ValidationInvalidReason::BLOCK_INVALID_HEADER, false, REJECT_INVALID, "bad-blk-pos", pos::ToString(result));
+            }
+        } else {
+            return state.Invalid(ValidationInvalidReason::BLOCK_INVALID_HEADER, false, REJECT_INVALID, "bad-blk-pos", "not allow pos");
+        }
+    }
 
     // Block signature
     if (pindexPrev->nHeight >= 1) {

@@ -1,0 +1,13 @@
+diff --git a/src/util.hpp b/src/util.hpp
+index 0d6c379..46f3ac0 100644
+--- a/src/util.hpp
++++ b/src/util.hpp
+@@ -364,7 +364,7 @@ namespace Util {
+     inline uint64_t PopCount(uint64_t n)
+     {
+ #if defined(_WIN32)
+-        return __popcnt64(n);
++        return _popcnt64(n);
+ #elif defined(__x86_64__)
+         uint64_t r;
+         __asm__("popcnt %1, %0" : "=r"(r) : "r"(n));

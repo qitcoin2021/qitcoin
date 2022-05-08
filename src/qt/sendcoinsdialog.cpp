@@ -324,10 +324,11 @@ void SendCoinsDialog::on_sendButton_clicked()
     int nBindLimitHeight = 0;
 
     // Check tx payload
+    std::map<std::string, std::string> payloadInfo;
     CTxOutPayloadRef payload;
     if (operateMethod == PayOperateMethod::BindPlotter) {
         CTxOut txout(recipients[0].amount, GetScriptForDestination(DecodeDestination(recipients[0].address.toStdString())), recipients[0].payload);
-        payload = ExtractTxoutPayload(txout, nSpendHeight, {TXOUT_TYPE_BINDPLOTTER}, true);
+        payload = ExtractTxoutPayload(txout, nSpendHeight, {TXOUT_TYPE_BINDPLOTTER}, true, &payloadInfo);
         if (!payload || payload->type != TXOUT_TYPE_BINDPLOTTER) {
             QMessageBox msgBox(QMessageBox::Warning,
                 tr("Bind plotter"),
@@ -469,6 +470,8 @@ void SendCoinsDialog::on_sendButton_clicked()
 
         formatted.clear();
         formatted.append(tr("%1 bind to %2").arg(plotterId, address));
+        formatted.append(tr("Public Key: %1").arg(QString::fromStdString(payloadInfo["pubkey"])));
+        formatted.append(tr("Bind Type: %1").arg(QString::fromStdString(payloadInfo["type"])));
         formatted.append(tr("The operation will lock %1.").arg(amount));
         formatted.append(tr("You can unbind later, and the locked amount will be returned to this address."));
     }
@@ -622,8 +625,9 @@ void SendCoinsDialog::on_checkBindDataButton_clicked()
     CTxDestination bindToDest = DecodeDestination(recipient.address.toStdString());
 
     // Verify data
+    std::map<std::string, std::string> info;
     CTxOut txout(PROTOCOL_BINDPLOTTER_LOCKAMOUNT, GetScriptForDestination(bindToDest), recipient.payload);
-    auto payload = ExtractTxoutPayload(txout, nTipHeight, {}, true);
+    auto payload = ExtractTxoutPayload(txout, nTipHeight, {}, true, &info);
     if (!payload || payload->type != TXOUT_TYPE_BINDPLOTTER) {
         QMessageBox msgBox(QMessageBox::Critical, tr("Bind plotter"), tr("Bad bind plotter data!"), QMessageBox::Ok, this);
         msgBox.exec();
@@ -640,7 +644,10 @@ void SendCoinsDialog::on_checkBindDataButton_clicked()
     QString plotterId = "<b>" + QString::number(BindPlotterPayload::As(payload)->GetId()) + "</b>";
 
     QString information;
-    information += tr("Bind %1 to %2").arg(plotterId, address) + "<br /><br />";
+    information += tr("%1 bind to %2").arg(plotterId, address) + "<br />";
+    information += tr("Public Key: %1").arg(QString::fromStdString(info["pubkey"])) + "<br />";
+    information += tr("Bind Type: %1").arg(QString::fromStdString(info["type"])) + "<br />";
+    information += "<br />";
     information += tr("You can copy and send below signature bind data to %1 owner:").arg(address);
     information += "<hr />";
     information += "<p>";

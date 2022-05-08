@@ -25,6 +25,8 @@ void RegisterMiningRPCCommands(CRPCTable &tableRPC);
 void RegisterRawTransactionRPCCommands(CRPCTable &tableRPC);
 /** Register PoC RPC commands */
 void RegisterPoCRPCCommands(CRPCTable &tableRPC);
+/** Register PoS RPC commands */
+void RegisterPoSRPCCommands(CRPCTable &tableRPC);
 
 #ifdef ENABLE_OMNICORE
 /** Register Omni data retrieval RPC commands */
@@ -47,6 +49,7 @@ static inline void RegisterAllCoreRPCCommands(CRPCTable &t, bool enableOmni = fa
     RegisterMiningRPCCommands(t);
     RegisterRawTransactionRPCCommands(t);
     RegisterPoCRPCCommands(t);
+    RegisterPoSRPCCommands(t);
 
 #ifdef ENABLE_OMNICORE
     if (enableOmni) {

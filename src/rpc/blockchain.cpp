@@ -97,6 +97,22 @@ UniValue blockheaderToJSON(const CBlockIndex* tip, const CBlockIndex* blockindex
     result.pushKV("baseTarget", (uint64_t)blockindex->nBaseTarget);
     result.pushKV("plotterId", (uint64_t)blockindex->nPlotterId);
     result.pushKV("nonce", (uint64_t)blockindex->nNonce);
+    if (!blockindex->pos.IsNull()) {
+        UniValue pos(UniValue::VOBJ);
+
+        pos.pushKV("farmer_pubkey", HexStr(blockindex->pos.vchFarmerPubKey));
+        if (blockindex->pos.vchPoolPubKey.size() == 32) {
+            pos.pushKV("pool_puzzle_hash", HexStr(blockindex->pos.vchPoolPubKey));
+        } else {
+            pos.pushKV("pool_pubkey", HexStr(blockindex->pos.vchPoolPubKey));
+        }
+        pos.pushKV("proof", HexStr(blockindex->pos.vchProof));
+        pos.pushKV("k", (uint64_t)blockindex->pos.nPlotK);
+        pos.pushKV("signature", HexStr(blockindex->pos.vchSignature));
+        pos.pushKV("scan_iterations", (uint64_t)blockindex->pos.nScanIterations);
+
+        result.pushKV("pos", pos);
+    }
     result.pushKV("generationSignature", HexStr(blockindex->GetGenerationSignature()));
     if (blockindex->pprev) {
         LOCK(cs_main);
@@ -155,6 +171,22 @@ UniValue blockToJSON(const CBlock& block, const CBlockIndex* tip, const CBlockIn
     result.pushKV("baseTarget", (uint64_t)blockindex->nBaseTarget);
     result.pushKV("plotterId", (uint64_t)blockindex->nPlotterId);
     result.pushKV("nonce", (uint64_t)blockindex->nNonce);
+    if (!blockindex->pos.IsNull()) {
+        UniValue pos(UniValue::VOBJ);
+
+        pos.pushKV("farmer_pubkey", HexStr(blockindex->pos.vchFarmerPubKey));
+        if (blockindex->pos.vchPoolPubKey.size() == 32) {
+            pos.pushKV("pool_puzzle_hash", HexStr(blockindex->pos.vchPoolPubKey));
+        } else {
+            pos.pushKV("pool_pubkey", HexStr(blockindex->pos.vchPoolPubKey));
+        }
+        pos.pushKV("proof", HexStr(blockindex->pos.vchProof));
+        pos.pushKV("k", (uint64_t)blockindex->pos.nPlotK);
+        pos.pushKV("signature", HexStr(blockindex->pos.vchSignature));
+        pos.pushKV("scan_iterations", (uint64_t)blockindex->pos.nScanIterations);
+
+        result.pushKV("pos", pos);
+    }
     result.pushKV("generationSignature", HexStr(blockindex->GetGenerationSignature()));
     if (blockindex->pprev) {
         LOCK(cs_main);
