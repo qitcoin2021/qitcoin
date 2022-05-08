@@ -204,15 +204,4 @@ unsigned int MurmurHash3(unsigned int nHashSeed, const std::vector<unsigned char
 
 void BIP32Hash(const ChainCode &chainCode, unsigned int nChild, unsigned char header, const unsigned char data[32], unsigned char output[64]);
 
-/** Utility functions for original PoC legacy. See https://qitchain.org/wiki/poc */
-namespace PocLegacy {
-
-uint64_t GeneratePlotterId(const std::string &passphrase);
-uint64_t ToPlotterId(const unsigned char publicKey[32]);
-
-bool Sign(const std::string &passphrase, const unsigned char data[32], unsigned char signature[64], unsigned char publicKey[32]);
-bool Verify(const unsigned char publicKey[32], const unsigned char data[32], const unsigned char signature[64]);
-
-}
-
 #endif // BITCOIN_HASH_H

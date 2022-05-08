@@ -34,8 +34,11 @@
 #include <chainparams.h>
 #include <interfaces/handler.h>
 #include <interfaces/node.h>
-#include <poc/passphrase.h>
+#include <poc/poc.h>
+#include <pos/pos.h>
 #include <ui_interface.h>
+#include <util/bip39.h>
+#include <util/strencodings.h>
 #include <util/system.h>
 
 #include <QAction>
@@ -842,13 +845,33 @@ void BitcoinGUI::showHelpMessageClicked()
 
 void BitcoinGUI::generatePassphraseClicked()
 {
-    std::string passphrase = poc::generatePassphrase();
-    uint64_t plotterId = PocLegacy::GeneratePlotterId(passphrase);
-
     QString information;
     information += "<span style='color:#aa0000;'>" + tr("This account is randomly generated, please save it. Loss will make plotting data invalid.") + "</span><br/><br/>";
-    information += tr("Passphrase: %1").arg(QString::fromStdString(passphrase)) + "<br/>";
-    information += tr("Plotter ID: %1").arg(QString::number(plotterId));
+
+    // PoC
+    {
+        auto passphrase = BIP39_JoinMnemonic(BIP39_GenMnemonic(12));
+
+        information += tr("For PoC:") + "<br/>";
+        information += tr("Passphrase: %1").arg(QString::fromStdString(passphrase)) + "<br/>";
+        information += tr("Plotter ID: %1").arg(QString::number(poc::GeneratePlotterId(passphrase))) + "<br/>";
+    }
+
+    information += "<br/>";
+
+    // PoS
+    {
+        auto passphrase = BIP39_JoinMnemonic(BIP39_GenMnemonic(24));
+        auto masterPrivateKey = pos::GeneratePrivateKey(passphrase);
+        auto farmerPublicKeyBytes = pos::DeriveMasterToFarmer(masterPrivateKey).GetG1Element().Serialize();
+        auto poolPublicKeyBytes = pos::DeriveMasterToPool(masterPrivateKey).GetG1Element().Serialize();
+
+        information += tr("For PoS:") + "<br/>";
+        information += tr("Passphrase: %1").arg(QString::fromStdString(passphrase)) + "<br/>";
+        information += tr("Farmer Public Key: %1").arg(QString::fromStdString(HexStr(farmerPublicKeyBytes))) + "<br/>";
+        information += tr("Pool Public Key: %1").arg(QString::fromStdString(HexStr(poolPublicKeyBytes))) + "<br/>";
+        information += tr("Plotter ID: %1").arg(QString::number(pos::ToFarmerId(farmerPublicKeyBytes))) + "<br/>";
+    }
 
     QMessageBox messageBox(QMessageBox::Information, tr("Generate plotting account"), information, QMessageBox::Ok, this);
     messageBox.setTextInteractionFlags(Qt::TextSelectableByKeyboard|Qt::TextSelectableByMouse);

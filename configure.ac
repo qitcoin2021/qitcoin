@@ -1,8 +1,8 @@
 dnl require autoconf 2.60 (AS_ECHO/AS_ECHO_N)
 AC_PREREQ([2.60])
-define(_CLIENT_VERSION_MAJOR, 1)
-define(_CLIENT_VERSION_MINOR, 23)
-define(_CLIENT_VERSION_REVISION, 8)
+define(_CLIENT_VERSION_MAJOR, 2)
+define(_CLIENT_VERSION_MINOR, 0)
+define(_CLIENT_VERSION_REVISION, 1)
 define(_CLIENT_VERSION_BUILD, 0)
 define(_CLIENT_VERSION_RC, 0)
 define(_CLIENT_VERSION_IS_RELEASE, true)
@@ -1308,6 +1308,16 @@ else
   fi
 fi
 
+AC_CHECK_HEADER([chiapos/api.h],,AC_MSG_ERROR(libchiapos headers missing))
+AC_CHECK_LIB([chiapos], [main], CHIAPOS_LIBS=-lchiapos, AC_MSG_ERROR(libchiapos missing))
+CHIAPOS_LIBS="$depends_prefix/lib/libchiapos.a"
+LIBS="$CHIAPOS_LIBS $LIBS"
+
+AC_CHECK_HEADER([chiabls/bls.hpp],,AC_MSG_ERROR(libchiabls headers missing))
+AC_CHECK_LIB([bls], [main], CHIABLS_LIBS=-lbls -lrelic_s -lsodium, AC_MSG_ERROR(libchiabls missing))
+CHIABLS_LIBS="$depends_prefix/lib/libbls.a $depends_prefix/lib/librelic_s.a $depends_prefix/lib/libsodium.a"
+LIBS="$CHIABLS_LIBS $LIBS"
+
 save_CXXFLAGS="${CXXFLAGS}"
 CXXFLAGS="${CXXFLAGS} ${CRYPTO_CFLAGS} ${SSL_CFLAGS}"
 AC_CHECK_DECLS([EVP_MD_CTX_new],,,[AC_INCLUDES_DEFAULT
@@ -1651,6 +1661,8 @@ AC_SUBST(EVENT_PTHREADS_LIBS)
 AC_SUBST(ZMQ_LIBS)
 AC_SUBST(PROTOBUF_LIBS)
 AC_SUBST(QR_LIBS)
+AC_SUBST(CHIAPOS_LIBS)
+AC_SUBST(CHIABLS_LIBS)
 AC_CONFIG_FILES([Makefile src/Makefile doc/man/Makefile share/setup.nsi share/qt/Info.plist test/config.ini])
 AC_CONFIG_FILES([contrib/devtools/split-debug.sh],[chmod +x contrib/devtools/split-debug.sh])
 AM_COND_IF([HAVE_DOXYGEN], [AC_CONFIG_FILES([doc/Doxyfile])])

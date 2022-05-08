@@ -3,15 +3,18 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <poc/poc.h>
+
 #include <chainparams.h>
 #include <compat/endian.h>
 #include <consensus/merkle.h>
 #include <consensus/params.h>
 #include <consensus/validation.h>
+#include <crypto/curve25519.h>
 #include <crypto/shabal256.h>
 #include <key_io.h>
 #include <logging.h>
 #include <miner.h>
+#include <pos/pos.h>
 #include <rpc/protocol.h>
 #include <rpc/request.h>
 #include <threadinterrupt.h>
@@ -38,10 +41,12 @@ namespace {
 
 // Generator
 struct GeneratorState {
+    int height;
+    uint64_t best;
+
+    CProofOfSpace pos;
     uint64_t plotterId;
     uint64_t nonce;
-    uint64_t best;
-    int height;
 
     CTxDestination dest;
     std::shared_ptr<CKey> privKey;
@@ -56,7 +61,8 @@ std::shared_ptr<CBlock> CreateBlock(const GeneratorState &generateState)
     std::unique_ptr<CBlockTemplate> pblocktemplate;
     try {
         pblocktemplate = BlockAssembler(Params()).CreateNewBlock(GetScriptForDestination(generateState.dest),
-            generateState.plotterId, generateState.nonce, generateState.best / ::ChainActive().Tip()->nBaseTarget,
+            generateState.pos, generateState.plotterId, generateState.nonce,
+            generateState.best / ::ChainActive().Tip()->nBaseTarget,
             generateState.privKey);
     } catch (std::exception &e) {
         const char *what = e.what();
@@ -253,6 +259,28 @@ static uint64_t CalculateUnformattedDeadline(const CBlockIndex& prevBlockIndex, 
     if (prevBlockIndex.nHeight <= 1)
         return 0;
 
+    // 1.for PoS block
+    if (!block.pos.IsNull()) {
+        // Regtest use nonce as deadline
+        if (params.fAllowMinDifficultyBlocks)
+            return (block.nNonce % static_cast<uint64_t>(params.nPowTargetSpacing)) * prevBlockIndex.nBaseTarget;
+
+        const uint64_t inflate = 80ULL * 512 / (1 << params.nPosFilterBits);
+
+        // check overflow
+        if (block.nNonce > std::numeric_limits<uint64_t>::max() / inflate)
+            return INVALID_DEADLINE;
+
+        int64_t nSubDeadline = static_cast<int64_t>((block.nNonce * inflate) / INITIAL_BASE_TARGET);
+        if (nSubDeadline >= params.nPowTargetSpacing)
+            return INVALID_DEADLINE;
+
+        int64_t nMainDeadline = static_cast<int64_t>(block.pos.nScanIterations) * params.nPowTargetSpacing;
+        return (nMainDeadline + nSubDeadline) * prevBlockIndex.nBaseTarget;
+    }
+
+    // 2.for PoC block
+
     // Regtest use nonce as deadline
     if (params.fAllowMinDifficultyBlocks)
         return block.nNonce * prevBlockIndex.nBaseTarget;
@@ -311,25 +339,19 @@ uint64_t CalculateBaseTarget(const CBlockIndex& prevBlockIndex, const CBlockHead
     }
 }
 
-uint64_t AddNonce(uint64_t& bestDeadline, const CBlockIndex& miningBlockIndex,
-    const uint64_t& nNonce, const uint64_t& nPlotterId, const std::string& generateTo,
+static uint64_t addNonce(uint64_t& bestDeadline, const CBlockIndex& miningBlockIndex,
+    const CBlockHeader& block, const std::string& generateTo,
     bool fCheckBind, const Consensus::Params& params)
 {
     AssertLockHeld(cs_main);
 
-    if (interruptCheckDeadline)
-        throw JSONRPCError(RPC_INVALID_REQUEST, "Not run in mining mode, restart by -server");
-
-    CBlockHeader block;
-    block.nPlotterId = nPlotterId;
-    block.nNonce     = nNonce;
     const uint64_t calcUnformattedDeadline = CalculateUnformattedDeadline(miningBlockIndex, block, params);
     if (calcUnformattedDeadline == INVALID_DEADLINE)
         throw JSONRPCError(RPC_INVALID_REQUEST, "Invalid deadline");
 
     const uint64_t calcDeadline = calcUnformattedDeadline / miningBlockIndex.nBaseTarget;
     LogPrint(BCLog::POC, "Add nonce: height=%d, nonce=%" PRIu64 ", plotterId=%" PRIu64 ", deadline=%" PRIu64 "\n",
-        miningBlockIndex.nHeight + 1, nNonce, nPlotterId, calcDeadline);
+        miningBlockIndex.nHeight + 1, block.nNonce, block.nPlotterId, calcDeadline);
     bestDeadline = calcDeadline;
     bool fNewBest = false;
     if (miningBlockIndex.nHeight >= ::ChainActive().Height() - 1) {
@@ -384,9 +406,9 @@ uint64_t AddNonce(uint64_t& bestDeadline, const CBlockIndex& miningBlockIndex,
             const CAccountID accountID = ExtractAccountID(dest);
             if (accountID.IsNull())
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Qitcoin address");
-            if (!::ChainstateActive().CoinsTip().AccountHaveActiveBindPlotter(accountID, nPlotterId))
+            if (!::ChainstateActive().CoinsTip().AccountHaveActiveBindPlotter(accountID, block.nPlotterId))
                 throw JSONRPCError(RPC_INVALID_REQUEST,
-                    strprintf("%" PRIu64 " with %s not active bind", nPlotterId, EncodeDestination(dest)));
+                    strprintf("%" PRIu64 " with %s not active bind", block.nPlotterId, EncodeDestination(dest)));
         }
 
         // Update private key for signature. Pre-set
@@ -423,10 +445,11 @@ uint64_t AddNonce(uint64_t& bestDeadline, const CBlockIndex& miningBlockIndex,
 
         // Update best
         GeneratorState &generatorState = mapGenerators[miningBlockIndex.GetNextGenerationSignature().GetUint64(0)];
-        generatorState.plotterId = nPlotterId;
-        generatorState.nonce     = nNonce;
         generatorState.best      = calcUnformattedDeadline;
         generatorState.height    = miningBlockIndex.nHeight + 1;
+        generatorState.pos       = block.pos;
+        generatorState.plotterId = block.nPlotterId;
+        generatorState.nonce     = block.nNonce;
         generatorState.dest      = dest;
         generatorState.privKey   = privKey;
 
@@ -436,6 +459,41 @@ uint64_t AddNonce(uint64_t& bestDeadline, const CBlockIndex& miningBlockIndex,
     }
 
     return calcDeadline;
+}
+
+uint64_t AddNonce(uint64_t& bestDeadline, const CBlockIndex& miningBlockIndex,
+    const uint64_t& nNonce, const uint64_t& nPlotterId, const std::string& generateTo,
+    bool fCheckBind, const Consensus::Params& params)
+{
+    AssertLockHeld(cs_main);
+
+    if (interruptCheckDeadline)
+        throw JSONRPCError(RPC_INVALID_REQUEST, "Not run in mining mode, restart by -server");
+
+    CBlockHeader block;
+    block.nPlotterId = nPlotterId;
+    block.nNonce     = nNonce;
+    return addNonce(bestDeadline, miningBlockIndex, block, generateTo, fCheckBind, params);
+}
+
+uint64_t AddProofOfSpace(uint64_t& bestDeadline, const CBlockIndex& miningBlockIndex,
+    const CProofOfSpace& pos, const std::string& generateTo,
+    bool fCheckBind, const Consensus::Params& params)
+{
+    AssertLockHeld(cs_main);
+
+    if (interruptCheckDeadline)
+        throw JSONRPCError(RPC_INVALID_REQUEST, "Not run in mining mode, restart by -server");
+
+    if (pos.IsNull() || !pos.IsValid())
+        throw JSONRPCError(RPC_INVALID_REQUEST, "Invalid Proof Of Space");
+
+    CBlockHeader block;
+    block.pos = pos;
+    ::pos::VerifyResult result = ::pos::VerifyAndUpdateBlockHeader(block, miningBlockIndex, params);
+    if (result != ::pos::VerifyResult::Success)
+        throw JSONRPCError(RPC_INVALID_REQUEST, strprintf("Apply Proof Of Space: %s", ::pos::ToString(result)));
+    return addNonce(bestDeadline, miningBlockIndex, block, generateTo, fCheckBind, params);
 }
 
 CBlockList GetEvalBlocks(int nHeight, bool fAscent, const Consensus::Params& params)
@@ -564,7 +622,11 @@ bool CheckProofOfCapacity(const CBlockIndex& prevBlockIndex, const CBlockHeader&
         return params.nBeginMiningTime == 0 || params.nBeginMiningTime == block.GetBlockTime();
     }
 
-    return block.GetBlockTime() == prevBlockIndex.GetBlockTime() + static_cast<int64_t>(deadline) + 1;
+    int64_t targetBlockTime = prevBlockIndex.GetBlockTime() + static_cast<int64_t>(deadline) + 1;
+    if (params.fAllowIncontinuityBlockTime) {
+        return block.GetBlockTime() >= targetBlockTime;
+    }
+    return block.GetBlockTime() == targetBlockTime;
 }
 
 CTxDestination AddMiningSignaturePrivkey(const CKey& key)

@@ -78,7 +78,8 @@ Optional<int64_t> BlockAssembler::m_last_block_num_txs{nullopt};
 Optional<int64_t> BlockAssembler::m_last_block_weight{nullopt};
 
 std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& scriptPubKeyIn,
-    uint64_t plotterId, uint64_t nonce, uint64_t deadline, const std::shared_ptr<CKey> privKey)
+    const CProofOfSpace &pos, uint64_t plotterId, uint64_t nonce,
+    uint64_t deadline, const std::shared_ptr<CKey> privKey)
 {
     int64_t nTimeStart = GetTimeMicros();
 
@@ -111,14 +112,24 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
 
     pblock->nTime = static_cast<uint32_t>(pindexPrev->GetBlockTime() + static_cast<int64_t>(deadline) + 1);
     if (nHeight <= 1) {
+        // pre-mining
         pblock->nTime = pindexPrev->GetBlockTime() + 1;
         plotterId = 0;
         nonce = 0;
     } else if (nHeight == 2) {
+        // begining
         if (chainparams.GetConsensus().nBeginMiningTime != 0) {
             pblock->nTime = static_cast<uint32_t>(chainparams.GetConsensus().nBeginMiningTime);
         }
         nonce = 0;
+    } else {
+        // reset block time
+        if (chainparams.GetConsensus().fAllowIncontinuityBlockTime) {
+            int64_t now = GetAdjustedTime();
+            if (now > pblock->nTime + chainparams.GetConsensus().nPowTargetSpacing * 10) {
+                pblock->nTime = now;
+            }
+        }
     }
     const int64_t nMedianTimePast = pindexPrev->GetMedianTimePast();
 
@@ -169,6 +180,7 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
 
     // Fill in header
     pblock->hashPrevBlock  = pindexPrev->GetBlockHash();
+    pblock->pos            = pos;
     pblock->nNonce         = nonce;
     pblock->nPlotterId     = plotterId;
     pblock->nBaseTarget    = poc::CalculateBaseTarget(*pindexPrev, *pblock, chainparams.GetConsensus());

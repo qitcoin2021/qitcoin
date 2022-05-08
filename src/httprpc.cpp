@@ -8,6 +8,7 @@
 #include <crypto/hmac_sha256.h>
 #include <httpserver.h>
 #include <key_io.h>
+#include <poc/poc.h>
 #include <rpc/protocol.h>
 #include <rpc/server.h>
 #include <sync.h>
@@ -242,7 +243,7 @@ static bool AdjustSubmitNonceParam(JSONRPCRequest& jreq, HTTPRequest* req, const
         jreq.params.pushKV("plotterId", plotterId->second);
     } else if (secretPhrase != parameters.cend() && !secretPhrase->second.empty()) {
         // secretPhrase to plotterId
-        jreq.params.pushKV("plotterId", PocLegacy::GeneratePlotterId(secretPhrase->second));
+        jreq.params.pushKV("plotterId", poc::GeneratePlotterId(secretPhrase->second));
     } else {
         PoCJSONErrorReply(req, 1, "Incorrect request");
         return false;

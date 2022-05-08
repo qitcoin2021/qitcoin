@@ -16,6 +16,7 @@
 #include <policy/feerate.h>
 #include <policy/fees.h>
 #include <policy/rbf.h>
+#include <pos/pos.h>
 #include <rpc/rawtransaction_util.h>
 #include <rpc/server.h>
 #include <rpc/util.h>
@@ -4392,19 +4393,30 @@ static UniValue bindplotter(const JSONRPCRequest& request)
     // Bind script
     CScript bindScript;
     if (!request.params[1].isStr()) {
-        throw JSONRPCError(RPC_TYPE_ERROR, "Invalid plotter passphrase or bind data");
+        throw JSONRPCError(RPC_TYPE_ERROR, "Invalid passphrase or bind data");
     } else {
         const std::string str = request.params[1].get_str();
-        if (str.size() == PROTOCOL_BINDPLOTTER_SCRIPTSIZE * 2 && IsHex(str)) {
+        if ((str.size() == PROTOCOL_BINDPLOTTER_POC_SCRIPTSIZE * 2
+                || str.size() == PROTOCOL_BINDPLOTTER_POS_SCRIPTSIZE * 2)
+            && IsHex(str)) {
             // use bind data
             std::vector<unsigned char> bindData(ParseHex(str));
             bindScript = CScript(bindData.cbegin(), bindData.cend());
+        } else if (str.find("pos:") == 0) {
+            // use passphrase for PoS
+            auto farmerPrivateKey = pos::DeriveMasterToFarmer(pos::GeneratePrivateKey(str.substr(4)));
+            auto locked_chain = pwallet->chain().lock();
+            bindScript = GetBindPlotterScriptForDestination(bindToDest, farmerPrivateKey, locked_chain->getHeight().get_value_or(0) + PROTOCOL_BINDPLOTTER_DEFAULTMAXALIVE);
+        } else if (str.find("poc:") == 0) {
+            // use passphrase for PoC
+            auto locked_chain = pwallet->chain().lock();
+            bindScript = GetBindPlotterScriptForDestination(bindToDest, str.substr(4), locked_chain->getHeight().get_value_or(0) + PROTOCOL_BINDPLOTTER_DEFAULTMAXALIVE);
         } else {
-            // use passphrase
+            // use passphrase for PoC
             auto locked_chain = pwallet->chain().lock();
             bindScript = GetBindPlotterScriptForDestination(bindToDest, str, locked_chain->getHeight().get_value_or(0) + PROTOCOL_BINDPLOTTER_DEFAULTMAXALIVE);
         }
-        assert(bindScript.size() == PROTOCOL_BINDPLOTTER_SCRIPTSIZE);
+        assert(bindScript.size() == PROTOCOL_BINDPLOTTER_POC_SCRIPTSIZE || bindScript.size() == PROTOCOL_BINDPLOTTER_POS_SCRIPTSIZE);
     }
 
     // High fee
@@ -4637,7 +4649,7 @@ static UniValue listbindplotters(const JSONRPCRequest& request)
         TxBindPlotter txBindPlotter;
         txBindPlotter.txid = wtx.GetHash();
         txBindPlotter.address = toDest;
-        txBindPlotter.plotterId = std::stol(wtx.GetMapValue("id"));
+        txBindPlotter.plotterId = std::stoull(wtx.GetMapValue("id"));
         txBindPlotter.fWatchonly = (ismine & ISMINE_WATCH_ONLY) != 0;
         mapTxBindPlotter.insert(std::pair<int64_t, TxBindPlotter>(wtx.nTimeReceived, txBindPlotter));
     }

@@ -253,9 +253,18 @@ void TxToUniv(const CTransaction& tx, const uint256& hashBlock, UniValue& entry,
 
 bool TxoutPayloadToUniv(const CTxOut& txout, int nHeight, UniValue& out)
 {
-    auto payload = ExtractTxoutPayload(txout, nHeight, {TXOUT_TYPE_BINDPLOTTER, TXOUT_TYPE_POINT, TXOUT_TYPE_STAKING});
+    std::map<std::string,std::string> info;
+    auto payload = ExtractTxoutPayload(txout, nHeight, {TXOUT_TYPE_BINDPLOTTER, TXOUT_TYPE_POINT, TXOUT_TYPE_STAKING}, false, &info);
     if (!payload)
         return false;
+
+    if (!info.empty()) {
+        UniValue outInfo(UniValue::VOBJ);
+        for (auto it = info.begin(); it != info.end(); it++) {
+            outInfo.pushKV(it->first, it->second);
+        }
+        out.pushKV("info", outInfo);
+    }
 
     switch (payload->type) {
     case TxOutType::TXOUT_TYPE_BINDPLOTTER:

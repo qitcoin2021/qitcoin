@@ -23,6 +23,7 @@ class CBlock;
 class CBlockIndex;
 class CCoinsViewCache;
 class CKey;
+class CProofOfSpace;
 
 namespace Consensus { struct Params; }
 
@@ -93,6 +94,22 @@ uint64_t CalculateBaseTarget(const CBlockIndex& prevBlockIndex, const CBlockHead
  */
 uint64_t AddNonce(uint64_t& bestDeadline, const CBlockIndex& miningBlockIndex,
     const uint64_t& nPlotterId, const uint64_t& nNonce, const std::string& generateTo,
+    bool fCheckBind, const Consensus::Params& params);
+
+/**
+ * Add new Proof of Space
+ *
+ * @param bestDeadline      Output current best deadline
+ * @param miningBlockIndex  Mining block
+ * @param pos               Proof of Space
+ * @param generateTo        Destination address or private key for block signing
+ * @param fCheckBind        Check address and plot bind relation
+ * @param params            Consensus params
+ *
+ * @return Return deadline calc result
+ */
+uint64_t AddProofOfSpace(uint64_t& bestDeadline, const CBlockIndex& miningBlockIndex,
+    const CProofOfSpace& pos, const std::string& generateTo,
     bool fCheckBind, const Consensus::Params& params);
 
 /**
@@ -193,6 +210,13 @@ CTxDestination AddMiningSignaturePrivkey(const CKey& key);
  * @return Imported signature key related P2WSH addresses
  */
 std::vector<CTxDestination> GetMiningSignatureAddresses();
+
+/** Utility functions for original PoC legacy. See https://qitchain.org/wiki/poc */
+uint64_t GeneratePlotterId(const std::string &passphrase);
+uint64_t ToPlotterId(const unsigned char publicKey[32]);
+
+bool Sign(const std::string &passphrase, const unsigned char data[32], unsigned char signature[64], unsigned char publicKey[32]);
+bool Verify(const unsigned char publicKey[32], const unsigned char data[32], const unsigned char signature[64]);
 
 }
 

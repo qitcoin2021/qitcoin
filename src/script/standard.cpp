@@ -7,6 +7,8 @@
 
 #include <key_io.h>
 #include <crypto/sha256.h>
+#include <poc/poc.h>
+#include <pos/pos.h>
 #include <pubkey.h>
 #include <script/script.h>
 #include <util/strencodings.h>
@@ -431,25 +433,63 @@ CScript GetBindPlotterScriptForDestination(const CTxDestination& dest, const std
         Write(scriptID->begin(), CScriptID::WIDTH).
         Write(bindPlotterSalt, sizeof(bindPlotterSalt)).
         Finalize(data);
-    if (!PocLegacy::Sign(passphrase, data, signature, publicKey))
+    if (!poc::Sign(passphrase, data, signature, publicKey))
         return CScript();
-    assert(PocLegacy::Verify(publicKey, data, signature));
-    if (PocLegacy::ToPlotterId(publicKey) == 0)
+    assert(poc::Verify(publicKey, data, signature));
+    if (poc::ToPlotterId(publicKey) == 0)
         return CScript();
 
     CScript script;
-    script << ToByteVector(TXOUT_TYPE_BINDPLOTTER);
-    script << ToByteVector((uint32_t) lastActiveHeight);
-    script << std::vector<unsigned char>(publicKey, publicKey+32);
-    script << std::vector<unsigned char>(signature, signature+64);
+    script << ToByteVector(TXOUT_TYPE_BINDPLOTTER); // 1 + 4
+    script << ToByteVector((uint32_t) lastActiveHeight); // 1 + 4
+    script << std::vector<unsigned char>(publicKey, publicKey+32); // 1 + 32
+    script << std::vector<unsigned char>(signature, signature+64); // 1 + 64
 
-    assert(script.size() == PROTOCOL_BINDPLOTTER_SCRIPTSIZE);
+    assert(script.size() == PROTOCOL_BINDPLOTTER_POC_SCRIPTSIZE);
+    return script;
+}
+
+CScript GetBindPlotterScriptForDestination(const CTxDestination& dest, const bls::PrivateKey& farmerPrivateKey, int lastActiveHeight)
+{
+    if (lastActiveHeight <= 0 || farmerPrivateKey.IsZero())
+        return CScript();
+
+    // Check destination type is P2SH
+    const ScriptHash *scriptID = boost::get<ScriptHash>(&dest);
+    if (scriptID == nullptr)
+        return CScript();
+
+    std::vector<unsigned char> data;
+    data.resize(32);
+    CSHA256().
+        Write(ToByteVector((uint32_t) lastActiveHeight).data(), 4).
+        Write(scriptID->begin(), CScriptID::WIDTH).
+        Write(bindPlotterSalt, sizeof(bindPlotterSalt)).
+        Finalize(&data[0]);
+    auto signature = bls::AugSchemeMPL().Sign(farmerPrivateKey, data);
+    if (!signature.IsValid())
+        return CScript();
+    auto signatureData = signature.Serialize();
+    auto publicKey = farmerPrivateKey.GetG1Element();
+    auto publicKeyData = publicKey.Serialize();
+    assert(bls::AugSchemeMPL().Verify(publicKey, data, signature));
+    if (pos::ToFarmerId(publicKeyData) == 0)
+        return CScript();
+
+    CScript script;
+    script << ToByteVector(TXOUT_TYPE_BINDPLOTTER); // 1 + 4
+    script << ToByteVector((uint32_t) lastActiveHeight); // 1 + 4
+    script << publicKeyData; // 1 + 48
+    script << signatureData; // 2 + 96
+    
+    assert(script.size() == PROTOCOL_BINDPLOTTER_POS_SCRIPTSIZE);
     return script;
 }
 
 bool IsBindPlotterScript(const CScript &script)
 {
-    if (script.size() != PROTOCOL_BINDPLOTTER_SCRIPTSIZE)
+    if (script.size() != PROTOCOL_BINDPLOTTER_POC_SCRIPTSIZE
+        && script.size() != PROTOCOL_BINDPLOTTER_POS_SCRIPTSIZE)
         return false;
 
     opcodetype opcode;
@@ -468,7 +508,8 @@ bool IsBindPlotterScript(const CScript &script)
 
 CScript SignBindPlotterScript(const CScript &script, const CKey &key)
 {
-    if (script.size() != PROTOCOL_BINDPLOTTER_SCRIPTSIZE)
+    if (script.size() != PROTOCOL_BINDPLOTTER_POC_SCRIPTSIZE
+        && script.size() != PROTOCOL_BINDPLOTTER_POS_SCRIPTSIZE)
         return CScript();
 
     if (!key.IsCompressed())
@@ -516,48 +557,101 @@ CScript SignBindPlotterScript(const CScript &script, const CKey &key)
     return signScript;
 }
 
-bool DecodeBindPlotterScript(const CScript &script, uint64_t& plotterIdOut, std::string& pubkeyHexOut, std::string& signatureHexOut, int& lastActiveHeightOut)
+bool DecodeBindPlotterScript(const CScript &script, uint64_t& plotterIdOut, std::string& pubkeyHexOut, int& lastActiveHeightOut)
 {
-    if (script.size() != PROTOCOL_BINDPLOTTER_SCRIPTSIZE)
+    std::map<std::string,std::string> info;
+    if (!DecodeBindPlotterScript(script, info))
         return false;
 
-    opcodetype opcode;
-    std::vector<unsigned char> vData;
-
-    CScript::const_iterator pc = script.begin();
-    // Get data type
-    if (!script.GetOp(pc, opcode, vData) || opcode != 0x04)
-        return false;
-    unsigned int type = (vData[0] << 0) | (vData[1] << 8) | (vData[2] << 16) | (vData[3] << 24);
-    if (type != TXOUT_TYPE_BINDPLOTTER)
-        return false;
-
-    // Check last active height
-    if (!script.GetOp(pc, opcode, vData) || opcode != sizeof(uint32_t))
-        return false;
-    int lastActiveHeight = (((uint32_t)vData[0]) >> 0) | (((uint32_t)vData[1]) << 8) | (((uint32_t)vData[2]) << 16) | (((uint32_t)vData[3]) << 24);
-
-    // Signature
-    std::vector<unsigned char> vPublicKey, vSignature;
-    if (!script.GetOp(pc, opcode, vPublicKey) || opcode != 0x20)
-        return false;
-    if (!script.GetOp(pc, opcode, vSignature) || opcode != 0x40)
-        return false;
-
-    // success
-    plotterIdOut = PocLegacy::ToPlotterId(&vPublicKey[0]);
-    pubkeyHexOut = HexStr(vPublicKey);
-    signatureHexOut = HexStr(vSignature);
-    lastActiveHeightOut = lastActiveHeight;
+    plotterIdOut = std::stoull(info["plotterId"]);
+    pubkeyHexOut = info["pubkey"];
+    lastActiveHeightOut = std::stoi(info["lastActiveHeight"]);
     return true;
+
+}
+
+bool DecodeBindPlotterScript(const CScript &script, std::map<std::string,std::string> &info)
+{
+     if (script.size() == PROTOCOL_BINDPLOTTER_POC_SCRIPTSIZE) {
+        opcodetype opcode;
+        std::vector<unsigned char> vData;
+
+        CScript::const_iterator pc = script.begin();
+        // Get data type
+        if (!script.GetOp(pc, opcode, vData) || opcode != 0x04)
+            return false;
+        unsigned int type = (vData[0] << 0) | (vData[1] << 8) | (vData[2] << 16) | (vData[3] << 24);
+        if (type != TXOUT_TYPE_BINDPLOTTER)
+            return false;
+
+        // Check last active height
+        if (!script.GetOp(pc, opcode, vData) || opcode != sizeof(uint32_t))
+            return false;
+        int lastActiveHeight = (((uint32_t)vData[0]) >> 0) | (((uint32_t)vData[1]) << 8) | (((uint32_t)vData[2]) << 16) | (((uint32_t)vData[3]) << 24);
+
+        // Signature
+        std::vector<unsigned char> vPublicKey, vSignature;
+        if (!script.GetOp(pc, opcode, vPublicKey) || vPublicKey.size() != 0x20)
+            return false;
+        if (!script.GetOp(pc, opcode, vSignature) || vSignature.size() != 0x40)
+            return false;
+
+        // success
+        info["type"] = "PoC";
+        info["plotterId"] = std::to_string(poc::ToPlotterId(&vPublicKey[0]));
+        info["pubkey"] = HexStr(vPublicKey);
+        info["signature"] = HexStr(vSignature);
+        info["lastActiveHeight"] = std::to_string(lastActiveHeight);
+        return true;
+    }
+
+    if (script.size() == PROTOCOL_BINDPLOTTER_POS_SCRIPTSIZE) {
+        opcodetype opcode;
+        std::vector<unsigned char> vData;
+
+        CScript::const_iterator pc = script.begin();
+        // Get data type
+        if (!script.GetOp(pc, opcode, vData) || opcode != 0x04)
+            return false;
+        unsigned int type = (vData[0] << 0) | (vData[1] << 8) | (vData[2] << 16) | (vData[3] << 24);
+        if (type != TXOUT_TYPE_BINDPLOTTER)
+            return false;
+
+        // Check last active height
+        if (!script.GetOp(pc, opcode, vData) || opcode != sizeof(uint32_t))
+            return false;
+        int lastActiveHeight = (((uint32_t)vData[0]) >> 0) | (((uint32_t)vData[1]) << 8) | (((uint32_t)vData[2]) << 16) | (((uint32_t)vData[3]) << 24);
+
+        // Signature
+        std::vector<unsigned char> vPublicKey, vSignature;
+        if (!script.GetOp(pc, opcode, vPublicKey) || vPublicKey.size() != bls::G1Element::SIZE)
+            return false;
+        if (!script.GetOp(pc, opcode, vSignature) || vSignature.size() != bls::G2Element::SIZE)
+            return false;
+
+        // success
+        info["type"] = "PoS";
+        info["plotterId"] = std::to_string(pos::ToFarmerId(vPublicKey));
+        info["pubkey"] = HexStr(vPublicKey);
+        info["signature"] = HexStr(vSignature);
+        info["lastActiveHeight"] = std::to_string(lastActiveHeight);
+        return true;
+    }
+
+    return false;
 }
 
 uint64_t GetBindPlotterIdFromScript(const CScript &script)
 {
-    if (script.size() != PROTOCOL_BINDPLOTTER_SCRIPTSIZE)
-        return 0;
+    if (script.size() == PROTOCOL_BINDPLOTTER_POC_SCRIPTSIZE) {
+        return poc::ToPlotterId(&script[12]);
+    }
 
-    return PocLegacy::ToPlotterId(&script[12]);
+    if (script.size() == PROTOCOL_BINDPLOTTER_POS_SCRIPTSIZE) {
+        return pos::ToFarmerId(&script[12]);
+    }
+
+    return 0;
 }
 
 CScript GetPointScriptForDestination(const CTxDestination& dest, int lockBlocks) {
@@ -612,7 +706,7 @@ CAmount GetStakingAmount(CAmount amount, int lockBlocks)
     return 0;
 }
 
-CTxOutPayloadRef ExtractTxoutPayload(const CTxOut& txout, int nHeight, const std::set<TxOutType> &filters, bool for_test)
+CTxOutPayloadRef ExtractTxoutPayload(const CTxOut& txout, int nHeight, const std::set<TxOutType> &filters, bool for_test, std::map<std::string,std::string> *pinfo)
 {
     // 0x04 <Protocol> <...>
     if (txout.payload.size() < 6 || txout.payload[0] != 0x04)
@@ -633,9 +727,14 @@ CTxOutPayloadRef ExtractTxoutPayload(const CTxOut& txout, int nHeight, const std
         // Bind plotter
         if (txout.nValue < PROTOCOL_BINDPLOTTER_LOCKAMOUNT)
             return nullptr;
-        if ((for_test && txout.payload.size() != PROTOCOL_BINDPLOTTER_SCRIPTSIZE) ||
-                (!for_test && txout.payload.size() <= PROTOCOL_BINDPLOTTER_SCRIPTSIZE))
-            return nullptr;
+        if (for_test) {
+            if (txout.payload.size() != PROTOCOL_BINDPLOTTER_POC_SCRIPTSIZE
+                && txout.payload.size() != PROTOCOL_BINDPLOTTER_POS_SCRIPTSIZE)
+                return nullptr;
+        } else {
+            if (txout.payload.size() <= PROTOCOL_BINDPLOTTER_POC_SCRIPTSIZE)
+                return nullptr;
+        }
 
         // Check destination
         CTxDestination dest;
@@ -653,25 +752,52 @@ CTxOutPayloadRef ExtractTxoutPayload(const CTxOut& txout, int nHeight, const std
             return nullptr;
 
         // Verify signature: want binding
-        uint64_t plotterId;
         uint256 unsignDataHash;
-        {
-            std::vector<unsigned char> vPlotterPublicKey, vPlotterSignature;
-            if (!txout.payload.GetOp(pc, opcode, vPlotterPublicKey) || opcode != 0x20)
-                return nullptr;
-            if (!txout.payload.GetOp(pc, opcode, vPlotterSignature) || opcode != 0x40)
-                return nullptr;
-            CSHA256().
-                Write(ToByteVector((uint32_t) lastActiveHeight).data(), 4).
-                Write(scriptID->begin(), CScriptID::WIDTH).
-                Write(bindPlotterSalt, sizeof(bindPlotterSalt)).
-                Finalize(unsignDataHash.begin());
-            if (!PocLegacy::Verify(&vPlotterPublicKey[0], unsignDataHash.begin(), &vPlotterSignature[0]))
-                return nullptr;
+        CSHA256().
+            Write(ToByteVector((uint32_t) lastActiveHeight).data(), 4).
+            Write(scriptID->begin(), CScriptID::WIDTH).
+            Write(bindPlotterSalt, sizeof(bindPlotterSalt)).
+            Finalize(unsignDataHash.begin());
 
-            plotterId = PocLegacy::ToPlotterId(&vPlotterPublicKey[0]);
-            if (plotterId == 0)
+        std::vector<unsigned char> vPlotterPublicKey;
+        if (!txout.payload.GetOp(pc, opcode, vPlotterPublicKey))
+            return nullptr;
+        uint64_t plotterId;
+        std::string type;
+        {
+            if (vPlotterPublicKey.size() == 0x20) {
+                // PoC
+                std::vector<unsigned char> vPlotterSignature;
+                if (!txout.payload.GetOp(pc, opcode, vPlotterSignature) || vPlotterSignature.size() != 0x40)
+                    return nullptr;
+
+                if (!poc::Verify(&vPlotterPublicKey[0], unsignDataHash.begin(), &vPlotterSignature[0]))
+                    return nullptr;
+
+                plotterId = poc::ToPlotterId(&vPlotterPublicKey[0]);
+                if (plotterId == 0)
+                    return nullptr;
+                type = "PoC";
+            } else if (vPlotterPublicKey.size() == bls::G1Element::SIZE) {
+                // PoS
+                std::vector<unsigned char> vPlotterSignature;
+                if (!txout.payload.GetOp(pc, opcode, vPlotterSignature)  || vPlotterSignature.size() != bls::G2Element::SIZE)
+                    return nullptr;
+
+                bool fVerified = bls::AugSchemeMPL().Verify(
+                    bls::G1Element::FromByteVector(vPlotterPublicKey),
+                    std::vector<uint8_t>(unsignDataHash.begin(), unsignDataHash.end()),
+                    bls::G2Element::FromByteVector(vPlotterSignature));
+                if (!fVerified)
+                    return nullptr;
+
+                plotterId = pos::ToFarmerId(vPlotterPublicKey);
+                if (plotterId == 0)
+                    return nullptr;
+                type = "PoS";
+            } else {
                 return nullptr;
+            }
         }
 
         // Verify signature for binding target: accept binding
@@ -688,6 +814,11 @@ CTxOutPayloadRef ExtractTxoutPayload(const CTxOut& txout, int nHeight, const std
                 return nullptr;
             if (!pubkey.Verify(unsignDataHash, vSignature))
                 return nullptr;
+        }
+
+        if (pinfo != nullptr) {
+            pinfo->insert(std::make_pair("type", type));
+            pinfo->insert(std::make_pair("pubkey", HexStr(vPlotterPublicKey)));
         }
 
         std::shared_ptr<BindPlotterPayload> payload = std::make_shared<BindPlotterPayload>();

@@ -87,6 +87,7 @@ public:
         consensus.nCapacityEvalWindow = 3360; // About 1 week
         consensus.nSubsidyHalvingInterval = 700000; // About 4 years. 700000*180/(365*24*3600) = 3.99543379
         consensus.fAllowMinDifficultyBlocks = false; // For test
+        consensus.fAllowIncontinuityBlockTime = false; // For test
         consensus.nRuleChangeActivationThreshold = 3192; // 95% of 3360
         consensus.nMinerConfirmationWindow = 3360; // About 7 days
         consensus.nBindPlotterCheckHeight = consensus.nCapacityEvalWindow / consensus.nCapacityEvalWindow * consensus.nCapacityEvalWindow; // 3360
@@ -95,15 +96,20 @@ public:
         consensus.nPledgeFullRewardRatio = 800; // 80%
         consensus.nPledgeLowRewardRatio = 50; // 5%
 
+        consensus.nMercuryActiveHeight = 170000; // Fri, 20 May 2022 00:00:00 GMT
+
+        consensus.nPosFilterBits = 9;
+
+
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 28;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
 
         // The best chain should have at least this much work.
-        consensus.nMinimumChainWork = uint256S("0x0000000000000000000000000000000000000000000000049393466a65f3d509");
+        consensus.nMinimumChainWork = uint256S("0x0000000000000000000000000000000000000000000000c3bae4bbc409ce3e96");
 
         // By default assume that the signatures in ancestors of this block are valid.
-        consensus.defaultAssumeValid = uint256S("0x36c23422e4485bf61fb06949ceb9aa2381b1e07d1b155ac746d44e5571e523ff");
+        consensus.defaultAssumeValid = uint256S("0x2f705a69731611093a44ef9e9a99179489e826630ca46e7916a8bb5bebb87395");
 
         /**
          * The message start string is designed to be unlikely to occur in normal data.
@@ -135,6 +141,8 @@ public:
         vSeeds.push_back("seed1.qitchain.org");
         vSeeds.push_back("seed2.qitchain.org");
         vSeeds.push_back("seed3.qitchain.org");
+        vSeeds.push_back("seed.qitchain.link");
+        vSeeds.push_back("seed.qitchainnow.com");
 
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,0);
         base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,5);
@@ -167,15 +175,19 @@ public:
                 {  100000, uint256S("0x449f56e92293a9d618882cda7a2c8c8ac6cc50eec1face3806c293ad4b7d31ac") },
                 {  110000, uint256S("0xdb3b2ef45260dab8fdeb9b71f5fce708d3eb5c1cfa9638712e7c30900b75a43c") },
                 {  120000, uint256S("0x7f8b00e3f33d8adeac64f9937b9064f4d11b7990f6e116faffa93d06f19e4ff9") },
-                {  127000, uint256S("0x238ada5720ed4eb6dd7c08afb00d49916bdd6d6a82101564038e7339743aeed9") },
+                {  130000, uint256S("0xb254355cbf05603d40a87f5283e6d28d85f7859392c6db91ee024ac5ad353ca2") },
+                {  140000, uint256S("0x7f3ff615829ee7172c3be6ff9cc33a76e920e85c708b0292e8e2fde2b77c8221") },
+                {  150000, uint256S("0x48ee96ffef3db8902ba1c8e08263b8c826aa6cd42749d2293bd6e85f1dbd62fb") },
+                {  160000, uint256S("0x70dd8449d638fb494b5a90ac55ed939a4bfd13106df677b60aabda4a7c73baf0") },
+                {  164000, uint256S("0x2f705a69731611093a44ef9e9a99179489e826630ca46e7916a8bb5bebb87395") },
             }
         };
 
         chainTxData = ChainTxData{
-            // Data from RPC: getchaintxstats 4096 36c23422e4485bf61fb06949ceb9aa2381b1e07d1b155ac746d44e5571e523ff
-            /* nTime    */ 1633731247,
-            /* nTxCount */ 65768,
-            /* dTxRate  */ 0.0058,
+            // Data from RPC: getchaintxstats 4096 2f705a69731611093a44ef9e9a99179489e826630ca46e7916a8bb5bebb87395
+            /* nTime    */ 1651969427,
+            /* nTxCount */ 218949,
+            /* dTxRate  */ 0.0093,
         };
     }
 };
@@ -206,6 +218,7 @@ public:
         consensus.nCapacityEvalWindow = 3360;
         consensus.nSubsidyHalvingInterval = 700000;
         consensus.fAllowMinDifficultyBlocks = false;
+        consensus.fAllowIncontinuityBlockTime = true;
         consensus.nRuleChangeActivationThreshold = 3192; // 95% of 3360
         consensus.nMinerConfirmationWindow = 3360; // About 7 days
         consensus.nBindPlotterCheckHeight = consensus.nCapacityEvalWindow / consensus.nCapacityEvalWindow * consensus.nCapacityEvalWindow; // 3360
@@ -213,6 +226,10 @@ public:
         consensus.nPledgeRatio = 5 * COIN;
         consensus.nPledgeFullRewardRatio = 800; // 80%
         consensus.nPledgeLowRewardRatio = 50; // 5%
+
+        consensus.nMercuryActiveHeight = 0;
+
+        consensus.nPosFilterBits = 6;
 
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 28;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
@@ -304,6 +321,7 @@ public:
         consensus.nCapacityEvalWindow = 1680;
         consensus.nSubsidyHalvingInterval = 350000;
         consensus.fAllowMinDifficultyBlocks = true;
+        consensus.fAllowIncontinuityBlockTime = true;
         consensus.nRuleChangeActivationThreshold = 1596; // 95% for testchains
         consensus.nMinerConfirmationWindow = 1680;
         consensus.nBindPlotterCheckHeight = consensus.nCapacityEvalWindow / consensus.nCapacityEvalWindow * consensus.nCapacityEvalWindow;
@@ -311,6 +329,10 @@ public:
         consensus.nPledgeRatio = 5 * COIN;
         consensus.nPledgeFullRewardRatio = 800; // 80%
         consensus.nPledgeLowRewardRatio = 50; // 5%
+
+        consensus.nMercuryActiveHeight = 0;
+
+        consensus.nPosFilterBits = 0;
 
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 28;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;

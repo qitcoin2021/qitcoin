@@ -18,6 +18,8 @@
 #include <chainparams.h>
 #include <interfaces/chain.h>
 #include <key_io.h>
+#include <poc/poc.h>
+#include <pos/pos.h>
 #include <util/strencodings.h>
 
 #include <QApplication>
@@ -71,6 +73,8 @@ SendCoinsEntry::SendCoinsEntry(PayOperateMethod payOperateMethod, const Platform
     ui->plotterPassphrase->setVisible(false);
     ui->plotterDataAliveHeightLabel->setVisible(false);
     ui->plotterDataValidHeightSelector->setVisible(false);
+    ui->plotterBindTypeLabel->setVisible(false);
+    ui->plotterBindTypeSelector->setVisible(false);
     ui->lockBlocksLabel->setVisible(false);
     ui->lockBlocksSelector->setVisible(false);
 
@@ -114,6 +118,9 @@ SendCoinsEntry::SendCoinsEntry(PayOperateMethod payOperateMethod, const Platform
         ui->plotterPassphrase->setPlaceholderText(tr("Enter your plotter passphrase or bind hex data"));
         ui->plotterDataAliveHeightLabel->setVisible(true);
         ui->plotterDataValidHeightSelector->setVisible(true);
+        ui->plotterBindTypeLabel->setVisible(true);
+        ui->plotterBindTypeSelector->setVisible(true);
+
         for (const int n : bindActiveHeights) {
             assert(n > 0 && n <= PROTOCOL_BINDPLOTTER_MAXALIVE);
             ui->plotterDataValidHeightSelector->addItem(tr("%1 (%2 blocks)")
@@ -121,6 +128,10 @@ SendCoinsEntry::SendCoinsEntry(PayOperateMethod payOperateMethod, const Platform
                 .arg(n));
         }
         ui->plotterDataValidHeightSelector->setCurrentIndex(getIndexForPlotterDataValidHeight(PROTOCOL_BINDPLOTTER_DEFAULTMAXALIVE));
+
+        ui->plotterBindTypeSelector->addItem(tr("PoC"));
+        ui->plotterBindTypeSelector->addItem(tr("PoS"));
+        ui->plotterBindTypeSelector->setCurrentIndex(0);
     } else if (payOperateMethod == PayOperateMethod::Point) {
         ui->payToLabel->setText(tr("Point &To:"));
         ui->lockBlocksLabel->setVisible(true);
@@ -312,12 +323,20 @@ SendCoinsRecipient SendCoinsEntry::getValue()
     recipient.fSubtractFeeFromAmount = (ui->checkboxSubtractFeeFromAmount->checkState() == Qt::Checked);
     if (payOperateMethod == PayOperateMethod::BindPlotter) {
         QString plotterPassphrase = ui->plotterPassphrase->text().trimmed();
-        if (plotterPassphrase.size() == PROTOCOL_BINDPLOTTER_SCRIPTSIZE * 2 && IsHex(plotterPassphrase.toStdString())) {
-            // Hex data
+        if ((plotterPassphrase.size() == PROTOCOL_BINDPLOTTER_POC_SCRIPTSIZE * 2
+                || plotterPassphrase.size() == PROTOCOL_BINDPLOTTER_POS_SCRIPTSIZE * 2)
+            && IsHex(plotterPassphrase.toStdString())) {
+            // use bind data
             std::vector<unsigned char> bindData(ParseHex(plotterPassphrase.toStdString()));
            recipient.payload = CScript(bindData.cbegin(), bindData.cend());
+        } else if (ui->plotterBindTypeSelector->currentIndex() == 1) {
+            // use passphrase for PoS
+            auto farmerPrivateKey = pos::DeriveMasterToFarmer(pos::GeneratePrivateKey(plotterPassphrase.toStdString()));
+            int nTipHeight = model->wallet().chain().lock()->getHeight().get();
+            int plotterDataAliveHeight = getPlotterDataValidHeightForIndex(ui->plotterDataValidHeightSelector->currentIndex());
+            recipient.payload = GetBindPlotterScriptForDestination(DecodeDestination(recipient.address.toStdString()), farmerPrivateKey, nTipHeight + plotterDataAliveHeight);
         } else {
-            // Passphrase
+            // use passphrase for PoC
             int nTipHeight = model->wallet().chain().lock()->getHeight().get();
             int plotterDataAliveHeight = getPlotterDataValidHeightForIndex(ui->plotterDataValidHeightSelector->currentIndex());
             recipient.payload = GetBindPlotterScriptForDestination(DecodeDestination(recipient.address.toStdString()), plotterPassphrase.toStdString(), nTipHeight + plotterDataAliveHeight);

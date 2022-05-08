@@ -2612,6 +2612,10 @@ Note:  Since the fee is calculated on a per-byte basis, a fee of "100 satoshis p
         <translation>살아있는 시간 (&amp;A):</translation>
     </message>
     <message>
+        <source>&amp;Bind Type:</source>
+        <translation>유형(&amp;B):</translation>
+    </message>
+    <message>
         <source>&amp;Lock Blocks:</source>
         <translation>잠금 시간(&amp;L):</translation>
     </message>
