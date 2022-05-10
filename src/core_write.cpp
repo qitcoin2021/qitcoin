@@ -270,6 +270,7 @@ bool TxoutPayloadToUniv(const CTxOut& txout, int nHeight, UniValue& out)
     case TxOutType::TXOUT_TYPE_BINDPLOTTER:
         out.pushKV("type", "bindplotter");
         out.pushKV("id", std::to_string(BindPlotterPayload::As(payload)->GetId()));
+        out.pushKV("bind_type", BindPlotterPayload::As(payload)->GetTypeName());
         return true;
     case TxOutType::TXOUT_TYPE_POINT:
         out.pushKV("type", "point");

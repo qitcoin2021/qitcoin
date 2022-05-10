@@ -255,11 +255,27 @@ typedef std::shared_ptr<TxOutPayload> CTxOutPayloadRef;
 /** For bind plotter */
 struct BindPlotterPayload : public TxOutPayload
 {
-    uint64_t id;
+    enum class Type {
+        PoC,
+        PoS,
+    };
 
-    BindPlotterPayload() : TxOutPayload(TXOUT_TYPE_BINDPLOTTER), id(0) {}
+    uint64_t id;
+    Type eType;
+
+    BindPlotterPayload() : TxOutPayload(TXOUT_TYPE_BINDPLOTTER), id(0), eType(Type::PoC) {}
 
     const uint64_t& GetId() const { return id; }
+    const std::string GetTypeName() const {
+        switch (eType) {
+        case Type::PoC:
+            return "PoC";
+        case Type::PoS:
+            return "PoS";
+        }
+
+        return "";
+    }
 
     // Checkable cast for CTxOutPayloadRef
     static BindPlotterPayload * As(CTxOutPayloadRef &ref) {

@@ -208,11 +208,15 @@ bool Consensus::CheckTxInputs(const CTransaction& tx, CValidationState& state, c
         return state.Invalid(ValidationInvalidReason::CONSENSUS, false, REJECT_INVALID, "bad-txns-fee-outofrange");
     }
 
-    // CheckTxOutputs 
+    // CheckTxOutputs
     for (unsigned int i = 0; i < tx.vout.size(); ++i) {
         const CTxOut &txOut = tx.vout[i];
         auto payload = ExtractTxoutPayload(txOut, nSpendHeight);
         if (payload && payload->type == TXOUT_TYPE_BINDPLOTTER) {
+            // check PoS active
+            if (BindPlotterPayload::As(payload)->eType == BindPlotterPayload::Type::PoS && nSpendHeight < params.nMercuryActiveHeight)
+                return state.Invalid(ValidationInvalidReason::TX_INVALID_BIND, false, REJECT_INVALID, "bad-bindplotter-PoS");
+
             const CBindPlotterInfo lastBindInfo = prevInputs.GetLastBindPlotterInfo(BindPlotterPayload::As(payload)->GetId());
             if (!lastBindInfo.outpoint.IsNull() && nSpendHeight < GetBindPlotterLimitHeight(nSpendHeight, lastBindInfo, params)) {
                 // Change bind plotter punishment

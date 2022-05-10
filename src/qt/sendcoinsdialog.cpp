@@ -341,7 +341,15 @@ void SendCoinsDialog::on_sendButton_clicked()
         if (chain.haveActiveBindPlotter(ExtractAccountID(DecodeDestination(recipients[0].address.toStdString())), BindPlotterPayload::As(payload)->GetId())) {
             QMessageBox msgBox(QMessageBox::Warning,
                 tr("Bind plotter"),
-                tr("The plotter %1 already binded to %2.").arg(QString::number(BindPlotterPayload::As(payload)->GetId()), recipients[0].address), 
+                tr("The plotter %1 already binded to %2.").arg(QString::number(BindPlotterPayload::As(payload)->GetId()), recipients[0].address),
+                QMessageBox::Close, this);
+            msgBox.exec();
+            return;
+        }
+        if (BindPlotterPayload::As(payload)->eType == BindPlotterPayload::Type::PoS && nSpendHeight < params.nMercuryActiveHeight) {
+            QMessageBox msgBox(QMessageBox::Warning,
+                tr("Bind plotter"),
+                tr("The PoS bind plotter has not actived."),
                 QMessageBox::Close, this);
             msgBox.exec();
             return;
