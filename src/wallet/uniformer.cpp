@@ -99,6 +99,11 @@ Result CreateBindPlotterTransaction(CWallet* wallet, const CTxDestination &dest,
         errors.push_back(strprintf("The plotter %ull already binded to %s and actived.", plotterId, EncodeDestination(dest)));
         return Result::INVALID_REQUEST;
     }
+    // Check PoS active
+    if (bindScriptData.size() == PROTOCOL_BINDPLOTTER_POS_SCRIPTSIZE && nSpendHeight < params.nMercuryActiveHeight) {
+        errors.push_back("The PoS bind plotter has not actived.");
+        return Result::INVALID_REQUEST;
+    }
 
     // Create special coin control for bind plotter
     CCoinControl realCoinControl = coin_control;

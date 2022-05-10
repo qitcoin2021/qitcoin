@@ -763,7 +763,7 @@ CTxOutPayloadRef ExtractTxoutPayload(const CTxOut& txout, int nHeight, const std
         if (!txout.payload.GetOp(pc, opcode, vPlotterPublicKey))
             return nullptr;
         uint64_t plotterId;
-        std::string type;
+        BindPlotterPayload::Type eType;
         {
             if (vPlotterPublicKey.size() == 0x20) {
                 // PoC
@@ -777,7 +777,7 @@ CTxOutPayloadRef ExtractTxoutPayload(const CTxOut& txout, int nHeight, const std
                 plotterId = poc::ToPlotterId(&vPlotterPublicKey[0]);
                 if (plotterId == 0)
                     return nullptr;
-                type = "PoC";
+                eType = BindPlotterPayload::Type::PoC;
             } else if (vPlotterPublicKey.size() == bls::G1Element::SIZE) {
                 // PoS
                 std::vector<unsigned char> vPlotterSignature;
@@ -794,7 +794,7 @@ CTxOutPayloadRef ExtractTxoutPayload(const CTxOut& txout, int nHeight, const std
                 plotterId = pos::ToFarmerId(vPlotterPublicKey);
                 if (plotterId == 0)
                     return nullptr;
-                type = "PoS";
+                eType = BindPlotterPayload::Type::PoS;
             } else {
                 return nullptr;
             }
@@ -816,13 +816,15 @@ CTxOutPayloadRef ExtractTxoutPayload(const CTxOut& txout, int nHeight, const std
                 return nullptr;
         }
 
+        std::shared_ptr<BindPlotterPayload> payload = std::make_shared<BindPlotterPayload>();
+        payload->id = plotterId;
+        payload->eType = eType;
+
         if (pinfo != nullptr) {
-            pinfo->insert(std::make_pair("type", type));
+            pinfo->insert(std::make_pair("type", payload->GetTypeName()));
             pinfo->insert(std::make_pair("pubkey", HexStr(vPlotterPublicKey)));
         }
 
-        std::shared_ptr<BindPlotterPayload> payload = std::make_shared<BindPlotterPayload>();
-        payload->id = plotterId;
         return payload;
     } else if (type == TXOUT_TYPE_POINT) {
         // Point
