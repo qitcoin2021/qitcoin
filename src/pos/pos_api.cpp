@@ -137,4 +137,27 @@ uint256 CreateChallenge(const uint256& challenge, int32_t scanIterations)
     return result;
 }
 
+std::pair<uint64_t, uint64_t> GenerateStakingPoolNonces(const uint256 &epochHash, uint32_t nTargetHeight, const CAccountID &poolID, uint64_t votePower)
+{
+    const uint32_t height_be = htobe32(nTargetHeight);
+    uint64_t bestNonce = 0, bestDeadline = std::numeric_limits<uint64_t>::max();
+    for (uint64_t nonce = 1; nonce <= votePower; nonce++) {
+        const uint64_t nonce_be = htobe64(nonce);
+
+        uint256 result;
+        CSHA256().Write(epochHash.begin(), uint256::WIDTH).
+                  Write(poolID.begin(), CAccountID::WIDTH).
+                  Write((const unsigned char*)&height_be, sizeof(height_be)).
+                  Write((const unsigned char*)&nonce_be, sizeof(nonce_be)).
+                  Finalize((unsigned char*)&result);
+
+        uint64_t deadline = result.GetUint64(0);
+        if (deadline < bestDeadline) {
+            bestNonce = nonce;
+            bestDeadline = deadline;
+        }
+    }
+    return std::make_pair(bestNonce, bestDeadline);
+}
+
 }

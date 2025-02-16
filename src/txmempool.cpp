@@ -591,11 +591,11 @@ void CTxMemPool::clear()
     _clear();
 }
 
-static void CheckInputsAndUpdateCoins(const CTransaction& tx, CCoinsViewCache& mempoolDuplicate, const CCoinsViewCache &prevTipView, const int64_t spendheight)
+static void CheckInputsAndUpdateCoins(const CTransaction& tx, CCoinsViewCache& mempoolDuplicate, const CCoinsViewCache &prevTipView, const int64_t spendheight, const uint256 &epochHash)
 {
     CValidationState state;
     CAmount nFees;
-    bool fCheckResult = tx.IsCoinBase() || Consensus::CheckTxInputs(tx, state, mempoolDuplicate, prevTipView, spendheight, nFees, Params().GetConsensus());
+    bool fCheckResult = tx.IsCoinBase() || Consensus::CheckTxInputs(tx, state, mempoolDuplicate, prevTipView, spendheight, nFees, epochHash, Params().GetConsensus());
     if (!fCheckResult)
         LogPrintf("%s: Check txmempool fail: %s\n%s\n", __func__, FormatStateMessage(state), tx.ToString());
     assert(fCheckResult);
@@ -618,6 +618,7 @@ void CTxMemPool::check(const CCoinsViewCache *pcoins) const
 
     CCoinsViewCache mempoolDuplicate(const_cast<CCoinsViewCache*>(pcoins));
     const int64_t spendheight = GetSpendHeight(mempoolDuplicate);
+    const uint256 epochHash = GetSpendEpochHash(mempoolDuplicate, Params().GetConsensus());
 
     std::list<const CTxMemPoolEntry*> waitingOnDependants;
     for (indexed_transaction_set::const_iterator it = mapTx.begin(); it != mapTx.end(); it++) {
@@ -690,7 +691,7 @@ void CTxMemPool::check(const CCoinsViewCache *pcoins) const
         if (fDependsWait)
             waitingOnDependants.push_back(&(*it));
         else {
-            CheckInputsAndUpdateCoins(tx, mempoolDuplicate, *pcoins, spendheight);
+            CheckInputsAndUpdateCoins(tx, mempoolDuplicate, *pcoins, spendheight, epochHash);
         }
     }
     unsigned int stepsSinceLastRemove = 0;
@@ -702,7 +703,7 @@ void CTxMemPool::check(const CCoinsViewCache *pcoins) const
             stepsSinceLastRemove++;
             assert(stepsSinceLastRemove < waitingOnDependants.size());
         } else {
-            CheckInputsAndUpdateCoins(entry->GetTx(), mempoolDuplicate, *pcoins, spendheight);
+            CheckInputsAndUpdateCoins(entry->GetTx(), mempoolDuplicate, *pcoins, spendheight, epochHash);
             stepsSinceLastRemove = 0;
         }
     }

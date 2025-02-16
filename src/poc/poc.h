@@ -23,7 +23,7 @@ class CBlock;
 class CBlockIndex;
 class CCoinsViewCache;
 class CKey;
-class CProofOfSpace;
+class CChiaProofOfSpace;
 
 namespace Consensus { struct Params; }
 
@@ -109,7 +109,7 @@ uint64_t AddNonce(uint64_t& bestDeadline, const CBlockIndex& miningBlockIndex,
  * @return Return deadline calc result
  */
 uint64_t AddProofOfSpace(uint64_t& bestDeadline, const CBlockIndex& miningBlockIndex,
-    const CProofOfSpace& pos, const std::string& generateTo,
+    const CChiaProofOfSpace& pos, const std::string& generateTo,
     bool fCheckBind, const Consensus::Params& params);
 
 /**

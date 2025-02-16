@@ -53,7 +53,7 @@ bool passes_plot_filter(const uint256& plotId, const uint256& challenge, int fil
     return data == 0;
 }
 
-inline bool check_pos(const CProofOfSpace& pos)
+inline bool check_pos(const CChiaProofOfSpace& pos)
 {
     if (pos.IsNull() || !pos.IsValid())
         return false;
@@ -67,7 +67,7 @@ inline bool check_pos(const CProofOfSpace& pos)
 ::pos::VerifyResult VerifyAndGetIterations(
     uint64_t& iterations,
     const CBlockIndex& prevBlockIndex,
-    const CProofOfSpace& pos,
+    const CChiaProofOfSpace& pos,
     const uint256& challenge,
     const Consensus::Params& params)
 {
@@ -79,7 +79,7 @@ inline bool check_pos(const CProofOfSpace& pos)
 
     // 2.create and filter plot id
     const uint256 plotId = ::pos::CreatePlotId(pos.vchPoolPubKey, plotPubKey.Serialize());
-    if (!passes_plot_filter(plotId, challenge, params.nPosFilterBits))
+    if (!passes_plot_filter(plotId, challenge, params.nMercuryPosFilterBits))
         return ::pos::VerifyResult::ErrorPlotFilter;
 
     // 3.verify signature

@@ -262,10 +262,21 @@ bool GetTransaction(const uint256& hash, CTransactionRef& tx, const Consensus::P
  */
 bool ActivateBestChain(CValidationState& state, const CChainParams& chainparams, std::shared_ptr<const CBlock> pblock = std::shared_ptr<const CBlock>()) LOCKS_EXCLUDED(cs_main);
 /** Get block subsidy */
-CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams);
 
 /** Get block reward */
-std::vector<CTxOut> GetBlockReward(const CBlockIndex* pindexPrev, const CAmount& nFees, const CAccountID& generatorID, const uint64_t& nPlotterId, const CCoinsViewCache& view, const Consensus::Params& consensusParams) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+std::vector<CTxOut> GetBlockReward(const CBlockIndex* pindexPrev, const CAmount& nFees, const CAccountID& generatorID, uint64_t nPlotterId, const CCoinsViewCache& view, const Consensus::Params& consensusParams) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+
+/** Get initial staking pool amount */
+CAmount GetInitialStakingPoolAmount(int nHeight, const Consensus::Params& consensusParams);
+
+/** Get staking pool subsidy */
+CAmount GetBlockStakingPoolSubsidy(int nHeight, const Consensus::Params& consensusParams);
+
+const CBlockIndex* GetEpochInitIndex(const CBlockIndex* pindex, const Consensus::Params& consensusParams) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+uint256 GetEpochHash(const CBlockIndex* pindex, const Consensus::Params& consensusParams) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+uint256 GetCurrentEpochHash(const Consensus::Params& consensusParams) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+uint256 GetSpendEpochHash(const CCoinsViewCache& inputs, const Consensus::Params& params);
 
 /** Guess verification progress (as a fraction between 0.0=genesis and 1.0=current tip). */
 double GuessVerificationProgress(const ChainTxData& data, const CBlockIndex* pindex);

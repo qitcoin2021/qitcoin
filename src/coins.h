@@ -228,6 +228,70 @@ typedef std::shared_ptr<CCoinsViewCursor> CCoinsViewCursorRef;
 typedef std::pair<CAccountID, CAmount> CAccountBalance;
 typedef std::vector<CAccountBalance> CAccountBalanceList;
 
+/** <Account, Amount> */
+class StakingPool
+{
+public:
+    CAccountID poolID;
+    COutPoint poolPos;
+    CAmount stakeAmount;
+
+    StakingPool() {
+        poolID.SetNull();
+        poolPos.SetNull();
+        stakeAmount = 0;
+    }
+
+    StakingPool(const CAccountID &poolIDIn, const COutPoint &poolPosIn, CAmount stakeAmountIn) {
+        poolID = poolIDIn;
+        poolPos = poolPosIn;
+        stakeAmount = stakeAmountIn;
+    }
+
+    ADD_SERIALIZE_METHODS;
+
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action) {
+        READWRITE(poolID);
+        READWRITE(poolPos);
+        READWRITE(stakeAmount);
+    }
+};
+/** List of <Account, Amount> */
+typedef std::vector<StakingPool> CStakingPoolList;
+
+/** <Account, Amount, Amount> */
+class StakingPoolUser
+{
+public:
+    CAccountID accountID;
+    CAmount stakeAmount;
+    CAmount withdrawableAmount;
+
+    StakingPoolUser() {
+        accountID.SetNull();
+        stakeAmount = 0;
+        withdrawableAmount = 0;
+    }
+
+    StakingPoolUser(const CAccountID &accountIDIn, CAmount stakeAmountIn, CAmount withdrawableAmountIn) {
+        accountID = accountIDIn;
+        stakeAmount = stakeAmountIn;
+        withdrawableAmount = withdrawableAmountIn;
+    }
+
+    ADD_SERIALIZE_METHODS;
+
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action) {
+        READWRITE(accountID);
+        READWRITE(stakeAmount);
+        READWRITE(withdrawableAmount);
+    }
+};
+/** List of <Account, Amount, Amount> */
+typedef std::vector<StakingPoolUser> CStakingPoolUserList;
+
 /** Abstract view on the open txout dataset. */
 class CCoinsView
 {
@@ -283,6 +347,10 @@ public:
 
     //! Get top staking accounts
     virtual CAccountBalanceList GetTopStakingAccounts(int n, const CCoinsMap &mapModifiedCoins = {}) const;
+
+    //! Get Staking pool info
+    virtual CStakingPoolList GetStakingPools(const uint256 &epochHash) const;
+    virtual CStakingPoolUserList GetStakingPoolUsers(const uint256 &epochHash, const CAccountID &poolID) const;
 };
 
 
@@ -311,6 +379,8 @@ public:
     CBindPlotterCoinsMap GetAccountBindPlotterEntries(const CAccountID &accountID, const uint64_t &plotterId = 0) const override;
     CBindPlotterCoinsMap GetBindPlotterEntries(const uint64_t &plotterId) const override;
     CAccountBalanceList GetTopStakingAccounts(int n, const CCoinsMap &mapModifiedCoins = {}) const override;
+    CStakingPoolList GetStakingPools(const uint256 &epochHash) const override;
+    CStakingPoolUserList GetStakingPoolUsers(const uint256 &epochHash, const CAccountID &poolID) const override;
 };
 
 

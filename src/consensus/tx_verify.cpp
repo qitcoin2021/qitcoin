@@ -158,7 +158,9 @@ int64_t GetTransactionSigOpCost(const CTransaction& tx, const CCoinsViewCache& i
 }
 
 bool Consensus::CheckTxInputs(const CTransaction& tx, CValidationState& state, const CCoinsViewCache& inputs, const CCoinsViewCache& prevInputs,
-    int nSpendHeight, CAmount& txfee, const Consensus::Params& params)
+    int nSpendHeight, CAmount& txfee,
+    const uint256 &epochHash,
+    const Consensus::Params& params)
 {
     // are the actual inputs available?
     if (!inputs.HaveInputs(tx)) {
@@ -185,13 +187,22 @@ bool Consensus::CheckTxInputs(const CTransaction& tx, CValidationState& state, c
         }
 
         // Check special coin spend
-        if (coin.IsBindPlotter() && nSpendHeight < GetUnbindPlotterLimitHeight(CBindPlotterInfo(prevout, coin), prevInputs, params)) {
-            return state.Invalid(ValidationInvalidReason::TX_INVALID_BIND, false, REJECT_INVALID, "bad-txns-unbindplotter-limit");
+        if (nSpendHeight < params.nSaturnActiveHeight) {
+            if (coin.IsBindPlotter() && nSpendHeight < GetUnbindPlotterLimitHeight(CBindPlotterInfo(prevout, coin), prevInputs, params)) {
+                return state.Invalid(ValidationInvalidReason::TX_INVALID_BIND, false, REJECT_INVALID, "bad-txns-unbindplotter-limit");
+            }
+            if (coin.IsPoint() && coin.nHeight + PointPayload::As(coin.payload)->GetLockBlocks() > (uint32_t) nSpendHeight) {
+                return state.Invalid(ValidationInvalidReason::CONSENSUS, false, REJECT_INVALID, "bad-txns-point-locked");
+            }
+        } else {
+            // Check staking withdraw coin payload
+            if (prevout.n == COutPoint::STAKING_WITHDRAW_COIN_INDEX && coin.out.payload != CScript(epochHash.begin(), epochHash.end())) {
+                return state.Invalid(ValidationInvalidReason::CONSENSUS, false, REJECT_INVALID, "bad-txns-staking-withdraw");
+            }
         }
-        if (coin.IsPoint() && coin.nHeight + PointPayload::As(coin.payload)->GetLockBlocks() > (uint32_t) nSpendHeight) {
-            return state.Invalid(ValidationInvalidReason::CONSENSUS, false, REJECT_INVALID, "bad-txns-point-locked");
-        }
-        if (coin.IsStaking() && coin.nHeight + StakingPayload::As(coin.payload)->GetLockBlocks() > (uint32_t) nSpendHeight) {
+        if (coin.IsStaking() &&
+            coin.nHeight + StakingPayload::As(coin.payload)->GetLockBlocks() > (uint32_t) nSpendHeight &&
+            (nSpendHeight < params.nSaturnActiveHeight || coin.nHeight >= params.nSaturnActiveHeight)) {
             return state.Invalid(ValidationInvalidReason::CONSENSUS, false, REJECT_INVALID, "bad-txns-staking-locked");
         }
     }
@@ -208,24 +219,26 @@ bool Consensus::CheckTxInputs(const CTransaction& tx, CValidationState& state, c
         return state.Invalid(ValidationInvalidReason::CONSENSUS, false, REJECT_INVALID, "bad-txns-fee-outofrange");
     }
 
-    // CheckTxOutputs
-    for (unsigned int i = 0; i < tx.vout.size(); ++i) {
-        const CTxOut &txOut = tx.vout[i];
-        auto payload = ExtractTxoutPayload(txOut, nSpendHeight);
-        if (payload && payload->type == TXOUT_TYPE_BINDPLOTTER) {
-            // check PoS active
-            if (BindPlotterPayload::As(payload)->eType == BindPlotterPayload::Type::PoS && nSpendHeight < params.nMercuryActiveHeight)
-                return state.Invalid(ValidationInvalidReason::TX_INVALID_BIND, false, REJECT_INVALID, "bad-bindplotter-PoS");
+    if (nSpendHeight < params.nSaturnActiveHeight) {
+        // CheckTxOutputs
+        for (unsigned int i = 0; i < tx.vout.size(); ++i) {
+            const CTxOut &txOut = tx.vout[i];
+            auto payload = ExtractTxoutPayload(txOut, nSpendHeight);
+            if (payload && payload->type == TXOUT_TYPE_BINDPLOTTER) {
+                // check PoS active
+                if (BindPlotterPayload::As(payload)->eType == BindPlotterPayload::Type::PoS && nSpendHeight < params.nMercuryActiveHeight)
+                    return state.Invalid(ValidationInvalidReason::TX_INVALID_BIND, false, REJECT_INVALID, "bad-bindplotter-PoS");
 
-            const CBindPlotterInfo lastBindInfo = prevInputs.GetLastBindPlotterInfo(BindPlotterPayload::As(payload)->GetId());
-            if (!lastBindInfo.outpoint.IsNull() && nSpendHeight < GetBindPlotterLimitHeight(nSpendHeight, lastBindInfo, params)) {
-                // Change bind plotter punishment
-                CAmount diffReward = GetBindPlotterPunishmentAmount(nSpendHeight, params);
-                if (txfee_aux < diffReward)
-                    return state.Invalid(ValidationInvalidReason::TX_INVALID_BIND, false, REJECT_INVALID, "bad-bindplotter-lowpunishment");
+                const CBindPlotterInfo lastBindInfo = prevInputs.GetLastBindPlotterInfo(BindPlotterPayload::As(payload)->GetId());
+                if (!lastBindInfo.outpoint.IsNull() && nSpendHeight < GetBindPlotterLimitHeight(nSpendHeight, lastBindInfo, params)) {
+                    // Change bind plotter punishment
+                    CAmount diffReward = GetBindPlotterPunishmentAmount(nSpendHeight, params);
+                    if (txfee_aux < diffReward)
+                        return state.Invalid(ValidationInvalidReason::TX_INVALID_BIND, false, REJECT_INVALID, "bad-bindplotter-lowpunishment");
 
-                // Only pay small transaction fee to miner. Other fee to black hole
-                txfee_aux -= diffReward;
+                    // Only pay small transaction fee to miner. Other fee to black hole
+                    txfee_aux -= diffReward;
+                }
             }
         }
     }

@@ -209,6 +209,7 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "liststakings", 2, "include_watchonly" },
     { "getplottermininginfo", 1, "verbose" },
     { "getchaintips", 0, "verbose" },
+    { "getstakingepoch", 0, "hash_or_height" },
 
     /* Qitcoin & Burst mining compatible */
     { "submitNonce", 2, "height" },

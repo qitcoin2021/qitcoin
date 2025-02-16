@@ -72,6 +72,12 @@ public:
     CBindPlotterCoinsMap GetAccountBindPlotterEntries(const CAccountID &accountID, const uint64_t &plotterId = 0) const override;
     CBindPlotterCoinsMap GetBindPlotterEntries(const uint64_t &plotterId) const override;
     CAccountBalanceList GetTopStakingAccounts(int n, const CCoinsMap &mapModifiedCoins = {}) const override;
+
+    CStakingPoolList GetStakingPools(const uint256 &epochHash) const override;
+    CStakingPoolUserList GetStakingPoolUsers(const uint256 &epochHash, const CAccountID &poolID) const override;
+
+private:
+    void TrySnapshotStakingPoolStatus(const CBlockIndex *pEpochInitIndex, const Consensus::Params &consensusParams);
 };
 
 /** Access to the block database (blocks/index/) */

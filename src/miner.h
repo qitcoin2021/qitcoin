@@ -149,6 +149,8 @@ private:
     int64_t nLockTimeCutoff;
     const CChainParams& chainparams;
 
+    uint256 epochHash;
+
 public:
     struct Options {
         Options();
@@ -161,9 +163,10 @@ public:
 
     /** Construct a new block template with coinbase to scriptPubKeyIn */
     std::unique_ptr<CBlockTemplate> CreateNewBlock(const CScript& scriptPubKeyIn,
-                                                   const CProofOfSpace &pos = CProofOfSpace(),
-                                                   uint64_t plotterId = 0, uint64_t nonce = 0,
+                                                   uint64_t nonce = 0,
                                                    uint64_t deadline = 0,
+                                                   uint64_t plotterId = 0,
+                                                   const CChiaProofOfSpace &pos = CChiaProofOfSpace(),
                                                    const std::shared_ptr<CKey> privKey = nullptr);
 
     static Optional<int64_t> m_last_block_num_txs;

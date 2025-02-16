@@ -48,6 +48,9 @@ static const char DB_COIN_POINT_RECEIVE = 'p';
 static const char DB_COIN_STAKING_SEND = 'S';
 static const char DB_COIN_STAKING_RECEIVE = 's';
 
+static const char DB_STAKING_POOL_EPOCH_POOL = 'T';
+static const char DB_STAKING_POOL_EPOCH_USERS = 't';
+
 namespace {
 
 struct CoinEntry {
@@ -272,6 +275,50 @@ struct AccountEntry {
     }
 };
 
+struct StakingPoolEntry {
+    uint256* epochHash;
+    char key;
+    StakingPoolEntry(const uint256* epochHashIn) :
+        epochHash(const_cast<uint256*>(epochHashIn)),
+        key(DB_STAKING_POOL_EPOCH_POOL) {}
+
+    template<typename Stream>
+    void Serialize(Stream &s) const {
+        s << key;
+        s << *epochHash;
+    }
+
+    template<typename Stream>
+    void Unserialize(Stream& s) {
+        s >> key;
+        s >> *epochHash;
+    }
+};
+
+struct StakingPoolUsersEntry {
+    uint256* epochHash;
+    CAccountID* poolID;
+    char key;
+    StakingPoolUsersEntry(const uint256* epochHashIn, const CAccountID* poolIDIn) :
+        epochHash(const_cast<uint256*>(epochHashIn)),
+        poolID(const_cast<CAccountID*>(poolIDIn)),
+        key(DB_STAKING_POOL_EPOCH_USERS) {}
+
+    template<typename Stream>
+    void Serialize(Stream &s) const {
+        s << key;
+        s << *epochHash;
+        s << *poolID;
+    }
+
+    template<typename Stream>
+    void Unserialize(Stream& s) {
+        s >> key;
+        s >> *epochHash;
+        s >> *poolID;
+    }
+};
+
 template <char DBPrefix>
 class CAccountCoinsViewDBCursor : public CCoinsViewCursor
 {
@@ -321,6 +368,15 @@ class CAccountIDHasher
 public:
     size_t operator()(const CAccountID& id) const noexcept {
         return (size_t) id.GetUint64(0);
+    }
+};
+
+typedef std::pair<CAccountID, CAccountID> AccountIDPair;
+class CAccountIDPairHasher
+{
+public:
+    size_t operator()(const AccountIDPair& id) const noexcept {
+        return (size_t) id.first.GetUint64(0) ^ id.second.GetUint64(0);
     }
 };
 
@@ -449,6 +505,9 @@ bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) {
             }
         }
     }
+
+    // Try write staking pool status
+    TrySnapshotStakingPoolStatus(LookupBlockIndex(hashBlock), Params().GetConsensus());
 
     // In the last batch, mark the database as consistent with hashBlock again.
     batch.Erase(DB_HEAD_BLOCKS);
@@ -896,6 +955,213 @@ CAccountBalanceList CCoinsViewDB::GetTopStakingAccounts(int n, const CCoinsMap &
             return l.second > r.second;
         });
     return topN;
+}
+
+void CCoinsViewDB::TrySnapshotStakingPoolStatus(const CBlockIndex *pEpochInitIndex, const Consensus::Params &consensusParams) {
+    if (pEpochInitIndex->nHeight - consensusParams.nSaturnEpockBlocks * 2 < consensusParams.nSaturnActiveHeight ||
+        pEpochInitIndex->nHeight%consensusParams.nSaturnEpockBlocks != 0) {
+        return;
+    }
+
+    LogPrint(BCLog::COINDB, "Begin SnapshotStakingPoolStatus for epoch %d\n", pEpochInitIndex->nHeight);
+
+    struct CUserStatus {
+        CAmount stakeAmount;
+        CAmount withdrawableAmount;
+        CUserStatus() : stakeAmount(0), withdrawableAmount(0) {}
+    };
+    struct CPoolStatus {
+        CAmount stakeAmount;
+        CAmount rewardAmount;
+        CPoolStatus() : stakeAmount(0), rewardAmount(0) {}
+    };
+    typedef std::unordered_map<CAccountID, CUserStatus, CAccountIDHasher> CUserStatusMap;
+    typedef std::unordered_map<CAccountID, CUserStatusMap, CAccountIDHasher> CPoolUserStatusMap; // <pool, user> => state
+    typedef std::unordered_map<CAccountID, CPoolStatus, CAccountIDHasher> CPoolStatusMap;
+
+    CPoolUserStatusMap epochPoolUsers(1024);
+    std::unordered_map<CAccountID, COutPoint, CAccountIDHasher> enabledPools(1024);
+
+    // load staking pool and user from db
+    {
+        CAccountID tempAccountID;
+        COutPoint tempOutpoint(uint256(), 0);
+        StakingReceiveEntry entry(&tempOutpoint, &tempAccountID);
+        std::unique_ptr<CDBIterator> pcursor(db.NewIterator());
+        for (pcursor->Seek(entry); pcursor->Valid(); pcursor->Next()) {
+            if (pcursor->GetKey(entry) && entry.key == DB_COIN_STAKING_RECEIVE) {
+                Coin coin;
+                if (!db.Read(CoinEntry(entry.outpoint), coin) || !coin.IsStaking())
+                    throw std::runtime_error("Database read invalid staking coin");
+
+                const auto payload = StakingPayload::As(coin.payload);
+                LogPrint(BCLog::COINDB, "  New staking coin: from=%s to=%s amount=%d\n", coin.outAccountID.ToString(), payload->GetReceiverID().ToString(), payload->GetAmount() / COIN);
+                if (coin.outAccountID == consensusParams.SaturnStakingGenesisID) {
+                    // initial pool
+                    if (coin.out.nValue < GetInitialStakingPoolAmount((int) coin.nHeight, consensusParams)) {
+                        continue;
+                    }
+                    enabledPools[payload->GetReceiverID()] = *(entry.outpoint);
+                } else {
+                    // staking
+                    if (coin.nHeight + payload->lockBlocks < (uint32_t) pEpochInitIndex->nHeight) {
+                        // unlocked
+                        continue;
+                    }
+
+                    auto &poolUsers = epochPoolUsers[payload->GetReceiverID()];
+                    poolUsers[coin.outAccountID].stakeAmount += payload->GetAmount();
+                }
+            } else {
+                break;
+            }
+        }
+
+        // filter staking pools
+        for (auto it = epochPoolUsers.begin(); it != epochPoolUsers.end();) {
+            if (enabledPools.count(it->first) == 0) {
+                it = epochPoolUsers.erase(it);
+            } else {
+                it++;
+            }
+        }
+    }
+
+    // previous epoch status
+    if (pEpochInitIndex->nHeight >= consensusParams.nSaturnActiveHeight + consensusParams.nSaturnEpockBlocks) {
+        CPoolStatusMap prevEpochPoolStatus(epochPoolUsers.size());
+
+        const CBlockIndex *pPrevEpochInitIndex = pEpochInitIndex; // pEpochInitIndex is previous epoch end block
+        for (int i = 0; i < consensusParams.nSaturnEpockBlocks; i++) {
+            CAccountID poolID = ExtractAccountID(pPrevEpochInitIndex->minerRewardTxOut.scriptPubKey);
+            prevEpochPoolStatus[poolID].rewardAmount += GetBlockStakingPoolSubsidy(pPrevEpochInitIndex->nHeight, consensusParams);
+            pPrevEpochInitIndex = pPrevEpochInitIndex->pprev;
+        }
+        const uint256 prevEpochHash = pPrevEpochInitIndex->GetBlockHash();
+
+        CStakingPoolList prevEpochPools;
+        if (db.Read(StakingPoolEntry(&prevEpochHash), prevEpochPools) && !prevEpochPools.empty()) {
+            CAmount prevEpochPoolstakeAmount = 0;
+            for (auto &pool : prevEpochPools) {
+                prevEpochPoolstakeAmount += pool.stakeAmount;
+                prevEpochPoolStatus[pool.poolID].stakeAmount = pool.stakeAmount;
+            }
+
+            // load previous epoch user pending
+            for (auto itPool = epochPoolUsers.begin(); itPool != epochPoolUsers.end(); itPool++) {
+                const CAccountID &poolID = itPool->first;
+                CUserStatusMap &poolUsers = itPool->second;
+
+                CPoolStatus &poolState = prevEpochPoolStatus[poolID];
+
+                // pool users
+                CStakingPoolUserList preEpochPoolUsers;
+                if (db.Read(StakingPoolUsersEntry(&prevEpochHash, &poolID), preEpochPoolUsers)) {
+                    for (auto const &preEpochPoolUser : preEpochPoolUsers) {
+                        auto itPoolUser = poolUsers.find(preEpochPoolUser.accountID);
+                        if (itPoolUser != poolUsers.end()) {
+                            const CAccountID &userID = itPoolUser->first;
+                            CUserStatus &userStatus = itPoolUser->second;
+
+                            // check withdrawn
+                            if (preEpochPoolUser.withdrawableAmount >= PROTOCOL_SATURN_STAKING_MIN_WITHDRAWABLE_AMOUNT) {
+                                // check if the withdraw coin is still in db
+                                COutPoint withdrawOutpoint = CreateStakePendingCoinOutPoint(prevEpochHash, poolID, userID);
+                                if (db.Exists(CoinEntry(&withdrawOutpoint))) {
+                                    userStatus.withdrawableAmount = preEpochPoolUser.withdrawableAmount;
+                                }
+                            } else {
+                                userStatus.withdrawableAmount = preEpochPoolUser.withdrawableAmount;
+                            }
+
+                            // add pre epoch reward
+                            if (poolState.rewardAmount > 0 && prevEpochPoolstakeAmount > 0) {
+                                userStatus.withdrawableAmount += CalcStakePoolUserReward(poolState.rewardAmount, preEpochPoolUser.stakeAmount, prevEpochPoolstakeAmount);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // write to db
+    const uint256 epochHash = pEpochInitIndex->GetBlockHash();
+    CDBBatch batch(db);
+    size_t batch_size = (size_t)gArgs.GetArg("-dbbatchsize", nDefaultDbBatchSize);
+    size_t userCount = 0;
+    CStakingPoolList pools;
+    pools.reserve(epochPoolUsers.size());
+    for (auto itPool = epochPoolUsers.begin(); itPool != epochPoolUsers.end(); itPool++) {
+        const CAccountID &poolID = itPool->first;
+        CUserStatusMap &poolUsers = itPool->second;
+
+        CAmount totalPoolStakeAmount = 0;
+
+        // pool users
+        CStakingPoolUserList users;
+        for (auto itPoolUser = poolUsers.begin(); itPoolUser != poolUsers.end(); itPoolUser++) {
+            const CAccountID &userID = itPoolUser->first;
+            CUserStatus &userStatus = itPoolUser->second;
+            users.push_back(StakingPoolUser(userID, userStatus.stakeAmount, userStatus.withdrawableAmount));
+            if (userStatus.withdrawableAmount >= PROTOCOL_SATURN_STAKING_MIN_WITHDRAWABLE_AMOUNT) {
+                COutPoint outpoint = CreateStakePendingCoinOutPoint(epochHash, poolID, userID);
+                CTxOut txOut(userStatus.withdrawableAmount, GetScriptForAccountID(userID), CScript(epochHash.begin(), epochHash.end()));
+                batch.Write(CoinEntry(&outpoint), Coin(txOut, pEpochInitIndex->nHeight, false));
+                if (batch.SizeEstimate() > batch_size) {
+                    LogPrint(BCLog::COINDB, "Writing staking pool partial batch of %.2f MiB\n", batch.SizeEstimate() * (1.0 / 1048576.0));
+                    db.WriteBatch(batch);
+                    batch.Clear();
+                }
+            }
+            totalPoolStakeAmount += userStatus.stakeAmount;
+        }
+        std::sort(users.begin(), users.end(),
+            [](const StakingPoolUser &a, const StakingPoolUser &b) {
+                if (a.stakeAmount == b.stakeAmount)
+                    return a.accountID < b.accountID;
+                return a.stakeAmount > b.stakeAmount;
+            }); // order by stake amount desc
+        batch.Write(StakingPoolUsersEntry(&epochHash, &poolID), users);
+        if (batch.SizeEstimate() > batch_size) {
+            LogPrint(BCLog::COINDB, "Writing staking pool partial batch of %.2f MiB\n", batch.SizeEstimate() * (1.0 / 1048576.0));
+            db.WriteBatch(batch);
+            batch.Clear();
+        }
+        userCount += users.size();
+
+        pools.push_back(StakingPool(poolID, enabledPools[poolID], totalPoolStakeAmount));
+        LogPrint(BCLog::COINDB, "  New Staking pool %s: amount=%d users=%u\n", poolID.ToString(), totalPoolStakeAmount / COIN, (unsigned int)users.size());
+    }
+    std::sort(pools.begin(), pools.end(),
+        [](const StakingPool &a, const StakingPool &b) {
+            if (a.stakeAmount == b.stakeAmount)
+                return a.poolID < b.poolID;
+            return a.stakeAmount > b.stakeAmount;
+        }); // order by stake amount desc
+    batch.Write(StakingPoolEntry(&epochHash), pools);
+
+    LogPrint(BCLog::COINDB, "Writing staking pool final batch of %.2f MiB\n", batch.SizeEstimate() * (1.0 / 1048576.0));
+    db.WriteBatch(batch);
+    LogPrint(BCLog::COINDB, "Committed %u pools, %u users to coin database...\n", (unsigned int)pools.size(), (unsigned int)userCount);
+
+    LogPrint(BCLog::COINDB, "End SnapshotStakingPoolStatus for epoch %d\n", pEpochInitIndex->nHeight);
+}
+
+CStakingPoolList CCoinsViewDB::GetStakingPools(const uint256 &epochHash) const {
+    CStakingPoolList pools;
+    if (!db.Read(StakingPoolEntry(&epochHash), pools)) {
+        return {};
+    }
+    return pools;
+}
+
+CStakingPoolUserList CCoinsViewDB::GetStakingPoolUsers(const uint256 &epochHash, const CAccountID &poolID) const {
+    CStakingPoolUserList users;
+    if (!db.Read(StakingPoolUsersEntry(&epochHash, &poolID), users)) {
+        return {};
+    }
+    return users;
 }
 
 CBlockTreeDB::CBlockTreeDB(size_t nCacheSize, bool fMemory, bool fWipe) : CDBWrapper(gArgs.IsArgSet("-blocksdir") ? GetDataDir() / "blocks" / "index" : GetBlocksDir() / "index", nCacheSize, fMemory, fWipe) {

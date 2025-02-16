@@ -97,9 +97,11 @@ public:
         consensus.nPledgeLowRewardRatio = 50; // 5%
 
         consensus.nMercuryActiveHeight = 170000; // Fri, 20 May 2022 00:00:00 GMT
+        consensus.nMercuryPosFilterBits = 9;
 
-        consensus.nPosFilterBits = 9;
-
+        consensus.nSaturnActiveHeight = 654201;
+        consensus.SaturnStakingGenesisID = uint160({ 0x0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }) ;// P2SH: 31h1vYVSYuKP6AhS86fbRdMw9XHkLXj3Lv 05 000000000000000000000000000000000000000f cb97a6db
+        consensus.nSaturnEpockBlocks = 100;
 
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 28;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
@@ -128,7 +130,7 @@ public:
         // Wed, 15 May 2021 16:00:00 GMT
         genesis = CreateGenesisBlock(consensus.nBeginMiningTime - 86400, 0, poc::INITIAL_BASE_TARGET, 2, 75 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
-        printf("Genesis block(%s): BlockHash=0x%s MerkleRoot=0x%s\n", strNetworkID.c_str(), consensus.hashGenesisBlock.ToString().c_str(), genesis.hashMerkleRoot.ToString().c_str()),
+        printf("Genesis block(%s): BlockHash=0x%s MerkleRoot=0x%s\n", strNetworkID.c_str(), consensus.hashGenesisBlock.ToString().c_str(), genesis.hashMerkleRoot.ToString().c_str());
         assert(consensus.hashGenesisBlock == uint256S("0x90001790809e09c1b2af490ed1bdcd687fab32f28da8012ef8b5fa08fbb4a9e4"));
         assert(genesis.hashMerkleRoot == uint256S("0x96fb099b59ba1f90c6ae8e16dbefa16941a07a0785743db700d682a7d6461084"));
         assert(genesis.nTime <= consensus.nBeginMiningTime || consensus.nBeginMiningTime == 0);
@@ -228,8 +230,11 @@ public:
         consensus.nPledgeLowRewardRatio = 50; // 5%
 
         consensus.nMercuryActiveHeight = 0;
+        consensus.nMercuryPosFilterBits = 6;
 
-        consensus.nPosFilterBits = 6;
+        consensus.nSaturnActiveHeight = 101;
+        consensus.SaturnStakingGenesisID = uint160({ 0x0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }) ;// P2SH: 2MsFDzHRUAMpjHxKyoEHU3aMCMsVv4Bxd2N c4 000000000000000000000000000000000000000f 2c48c2b7
+        consensus.nSaturnEpockBlocks = 100;
 
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 28;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
@@ -241,7 +246,7 @@ public:
         // By default assume that the signatures in ancestors of this block are valid.
         consensus.defaultAssumeValid = uint256S("0x00");
 
-        pchMessageStart[0] = 0x2f;
+        pchMessageStart[0] = 0x2e;
         pchMessageStart[1] = 0x12;
         pchMessageStart[2] = 0xa0;
         pchMessageStart[3] = 0x08;
@@ -253,7 +258,7 @@ public:
         // Sun, 21 Mar 2021 00:00:00 GMT
         genesis = CreateGenesisBlock(consensus.nBeginMiningTime - 86400, 1, poc::INITIAL_BASE_TARGET, 2, 75 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
-        printf("Genesis block(%s): BlockHash=0x%s MerkleRoot=0x%s\n", strNetworkID.c_str(), consensus.hashGenesisBlock.ToString().c_str(), genesis.hashMerkleRoot.ToString().c_str()),
+        printf("Genesis block(%s): BlockHash=0x%s MerkleRoot=0x%s\n", strNetworkID.c_str(), consensus.hashGenesisBlock.ToString().c_str(), genesis.hashMerkleRoot.ToString().c_str());
         assert(consensus.hashGenesisBlock == uint256S("0x5907f477f61c92161f6754986f1288989830524facc4e6c74ef16877f4eedd3c"));
         assert(genesis.hashMerkleRoot == uint256S("0x3bd777834b355b8e64c78b405fcd352345a7b35c0e957d5e906c1687ec309870"));
         assert(genesis.nTime <= consensus.nBeginMiningTime || consensus.nBeginMiningTime == 0);
@@ -330,9 +335,12 @@ public:
         consensus.nPledgeFullRewardRatio = 800; // 80%
         consensus.nPledgeLowRewardRatio = 50; // 5%
 
-        consensus.nMercuryActiveHeight = 0;
+        consensus.nMercuryActiveHeight = 50;
+        consensus.nMercuryPosFilterBits = 0;
 
-        consensus.nPosFilterBits = 0;
+        consensus.nSaturnActiveHeight = 101;
+        consensus.SaturnStakingGenesisID = uint160({ 0x0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }) ;// P2SH: 2MsFDzHRUAMpjHxKyoEHU3aMCMsVv4Bxd2N c4 000000000000000000000000000000000000000f 2c48c2b7
+        consensus.nSaturnEpockBlocks = 10;
 
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 28;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
@@ -344,7 +352,7 @@ public:
         // By default assume that the signatures in ancestors of this block are valid.
         consensus.defaultAssumeValid = uint256S("0x00");
 
-        pchMessageStart[0] = 0xf7;
+        pchMessageStart[0] = 0xf6;
         pchMessageStart[1] = 0xbb;
         pchMessageStart[2] = 0xb1;
         pchMessageStart[3] = 0xd6;
@@ -357,7 +365,7 @@ public:
 
         genesis = CreateGenesisBlock(consensus.nBeginMiningTime - 86400, 2, poc::INITIAL_BASE_TARGET, 2, 75 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
-        printf("Genesis block(%s): BlockHash=0x%s MerkleRoot=0x%s\n", strNetworkID.c_str(), consensus.hashGenesisBlock.ToString().c_str(), genesis.hashMerkleRoot.ToString().c_str()),
+        printf("Genesis block(%s): BlockHash=0x%s MerkleRoot=0x%s\n", strNetworkID.c_str(), consensus.hashGenesisBlock.ToString().c_str(), genesis.hashMerkleRoot.ToString().c_str());
         assert(consensus.hashGenesisBlock == uint256S("0x6afb318a0bd35f53fea1704762bc4d9cbe15da1ec80667ae5bec4033b6ebd21e"));
         assert(genesis.hashMerkleRoot == uint256S("0xc3f93c9ecea48b58b08211398ba8a15d8147fbbefb1a5fb3be4607d6a0572dfb"));
         assert(genesis.nTime <= consensus.nBeginMiningTime || consensus.nBeginMiningTime == 0);

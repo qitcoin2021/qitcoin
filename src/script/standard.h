@@ -379,6 +379,10 @@ static const CAmount PROTOCOL_POINT_AMOUNT_MIN = 10 * COIN;
 /** The point script size */
 static const int PROTOCOL_POINT_SCRIPTSIZE = 31;
 
+static const int PROTOCOL_POINT_LOCK_BLOCKS_HALF_AMOUNT = 360 * 480;
+
+static const int PROTOCOL_POINT_LOCK_BLOCKS_FULL_AMOUNT = 540 * 480;
+
 /** Generate a point script. */
 CScript GetPointScriptForDestination(const CTxDestination& dest, int lockBlocks);
 /** Get effective point amount. */
@@ -390,10 +394,27 @@ static const CAmount PROTOCOL_STAKING_AMOUNT_MIN = 100 * COIN;
 /** The staking script size */
 static const int PROTOCOL_STAKING_SCRIPTSIZE = 31;
 
+static const int PROTOCOL_STAKING_LOCK_BLOCKS_HALF_AMOUNT = 360 * 480;
+
+static const int PROTOCOL_STAKING_LOCK_BLOCKS_FULL_AMOUNT = 540 * 480;
+
 /** Generate staking script. */
 CScript GetStakingScriptForDestination(const CTxDestination& dest, int lockBlocks);
 /** Get effective staking amount. */
 CAmount GetStakingAmount(CAmount amount, int lockBlocks);
+
+/** Initial staking amount. */
+static const CAmount PROTOCOL_SATURN_STAKING_AMOUNT_INITIAL = 10000 * COIN;
+
+/** Min withdrawable amount. */
+static const CAmount PROTOCOL_SATURN_STAKING_MIN_WITHDRAWABLE_AMOUNT = 10 * COIN;
+
+/** Max staking account number. */
+static const int PROTOCOL_SATURN_STAKING_NODES_MAX = 10000;
+
+CAmount CalcStakePoolUserReward(CAmount poolReward, CAmount userStakeAmount, CAmount poolStakeAmount);
+
+COutPoint CreateStakePendingCoinOutPoint(const uint256 &epochHash, const CAccountID &poolID, const CAccountID &accountID);
 
 /** Parse transaction output payload. */
 CTxOutPayloadRef ExtractTxoutPayload(const CTxOut& txout, int nHeight = 0, const std::set<TxOutType>& filters = {}, bool for_test = false, std::map<std::string,std::string> *pinfo = nullptr);

@@ -44,7 +44,7 @@ struct GeneratorState {
     int height;
     uint64_t best;
 
-    CProofOfSpace pos;
+    CChiaProofOfSpace pos;
     uint64_t plotterId;
     uint64_t nonce;
 
@@ -52,6 +52,15 @@ struct GeneratorState {
     std::shared_ptr<CKey> privKey;
 
     GeneratorState() : best(poc::INVALID_DEADLINE) { }
+    void SetNull() {
+        height = 0;
+        best = poc::INVALID_DEADLINE;
+        pos.SetNull();
+        plotterId = 0;
+        nonce = 0;
+        dest = CTxDestination();
+        privKey = nullptr;
+    }
 };
 typedef std::unordered_map<uint64_t, GeneratorState> Generators; // Generation low 64bits -> GeneratorState
 Generators mapGenerators GUARDED_BY(cs_main);
@@ -61,8 +70,10 @@ std::shared_ptr<CBlock> CreateBlock(const GeneratorState &generateState)
     std::unique_ptr<CBlockTemplate> pblocktemplate;
     try {
         pblocktemplate = BlockAssembler(Params()).CreateNewBlock(GetScriptForDestination(generateState.dest),
-            generateState.pos, generateState.plotterId, generateState.nonce,
+            generateState.nonce,
             generateState.best / ::ChainActive().Tip()->nBaseTarget,
+            generateState.plotterId,
+            generateState.pos,
             generateState.privKey);
     } catch (std::exception &e) {
         const char *what = e.what();
@@ -77,7 +88,7 @@ std::shared_ptr<CBlock> CreateBlock(const GeneratorState &generateState)
 
 // Mining loop
 CThreadInterrupt interruptCheckDeadline;
-std::thread threadCheckDeadline;
+std::thread threadCheckDeadline, threadGenearetePoolsDeadline;
 void CheckDeadlineThread()
 {
     util::ThreadRename("bitcoin-checkdeadline");
@@ -186,6 +197,64 @@ void CheckDeadlineThread()
 typedef std::unordered_map< uint64_t, std::shared_ptr<CKey> > CPrivKeyMap;
 CPrivKeyMap mapSignaturePrivKeys;
 
+void GenearetePoolsDeadlineThread()
+{
+    util::ThreadRename("bitcoin-generatepoolsdeadline");
+
+    uint256 preProcessBlockHash;
+    while (!interruptCheckDeadline) {
+        if (!interruptCheckDeadline.sleep_for(std::chrono::milliseconds(500)))
+            break;
+
+        LOCK(cs_main);
+        auto const &params = Params().GetConsensus();
+        CBlockIndex *pindexTip = ::ChainActive().Tip();
+        if (pindexTip->nHeight + 1 < params.nSaturnActiveHeight || pindexTip->GetBlockHash() == preProcessBlockHash)
+            continue;
+        const uint256 epochHash = GetEpochHash(pindexTip, params);
+        for (const auto &pool : ::ChainstateActive().CoinsTip().GetStakingPools(epochHash)) {
+            CTxDestination poolDest = ExtractDestination(pool.poolID);
+            auto itPrivateKey = mapSignaturePrivKeys.find(boost::get<ScriptHash>(&poolDest)->GetUint64(0));
+            if (itPrivateKey == mapSignaturePrivKeys.end())
+                continue;
+            
+            auto result = pos::GenerateStakingPoolNonces(epochHash, pindexTip->nHeight + 1, pool.poolID, (uint64_t)(pool.stakeAmount / COIN));
+            GeneratorState &generatorState = mapGenerators[pindexTip->GetNextGenerationSignature().GetUint64(0)];
+            generatorState.SetNull();
+            generatorState.best      = result.second;
+            generatorState.height    = pindexTip->nHeight + 1;
+            generatorState.nonce     = result.first;
+            generatorState.dest      = poolDest;
+            generatorState.privKey   = itPrivateKey->second;
+            generatorState.plotterId = pool.poolID.GetUint64(0);
+
+            LogPrint(BCLog::POC, "%s %d: New pool %s deadline %" PRIu64 ".\n", epochHash.ToString(), pindexTip->nHeight + 1,
+                EncodeDestination(poolDest), generatorState.best / pindexTip->nBaseTarget);
+        }
+        if (params.fAllowMinDifficultyBlocks) {
+            // for Regtest
+            auto itPrivateKey = mapSignaturePrivKeys.cbegin();
+            CScript scriptPubKey = GetScriptForPubKey(itPrivateKey->second->GetPubKey());
+            CTxDestination poolDest = ExtractDestination(scriptPubKey);
+            CAccountID poolID = ExtractAccountID(scriptPubKey);
+
+            GeneratorState &generatorState = mapGenerators[pindexTip->GetNextGenerationSignature().GetUint64(0)];
+            generatorState.SetNull();
+            generatorState.best      = static_cast<uint64_t>(params.nPowTargetSpacing) * pindexTip->nBaseTarget;
+            generatorState.height    = pindexTip->nHeight + 1;
+            generatorState.nonce     = 1;
+            generatorState.dest      = poolDest;
+            generatorState.privKey   = itPrivateKey->second;
+            generatorState.plotterId = poolID.GetUint64(0);
+
+            LogPrint(BCLog::POC, "%s %d: New test pool %s deadline %" PRIu64 ".\n", epochHash.ToString(), pindexTip->nHeight + 1,
+                EncodeDestination(poolDest), generatorState.best / pindexTip->nBaseTarget);
+        }
+
+        preProcessBlockHash = pindexTip->GetBlockHash();
+    }
+}
+
 }
 
 namespace poc {
@@ -259,13 +328,38 @@ static uint64_t CalculateUnformattedDeadline(const CBlockIndex& prevBlockIndex, 
     if (prevBlockIndex.nHeight <= 1)
         return 0;
 
+    // Regtest use default deadline
+    if (params.fAllowMinDifficultyBlocks)
+        return static_cast<uint64_t>(params.nPowTargetSpacing) * prevBlockIndex.nBaseTarget;
+
     // 1.for PoS block
+    if (prevBlockIndex.nHeight + 1 >= params.nSaturnActiveHeight) {
+        // Is Fund
+        if (block.nNonce == 0)
+            return static_cast<uint64_t>(params.nPowTargetSpacing) * prevBlockIndex.nBaseTarget;
+
+        const CBlockIndex* pEpochInitIndex = GetEpochInitIndex(&prevBlockIndex, params);
+        const CAccountID poolID = ExtractAccountID(CPubKey(block.vchPubKey));
+        const uint32_t height_be = htobe32(prevBlockIndex.nHeight + 1);
+        const uint64_t nonce_be = htobe64(block.nNonce);
+
+        uint256 result;
+        CSHA256().Write(pEpochInitIndex->GetBlockHash().begin(), uint256::WIDTH)
+                 .Write(poolID.begin(), CAccountID::WIDTH)
+                 .Write((const unsigned char*)&height_be, sizeof(height_be))
+                 .Write((const unsigned char*)&nonce_be, sizeof(nonce_be))
+                 .Finalize((unsigned char*)&result);
+
+        return result.GetUint64(0);
+    }
+
+    // 2.for PoS block
     if (!block.pos.IsNull()) {
         // Regtest use nonce as deadline
         if (params.fAllowMinDifficultyBlocks)
             return (block.nNonce % static_cast<uint64_t>(params.nPowTargetSpacing)) * prevBlockIndex.nBaseTarget;
 
-        const uint64_t inflate = 80ULL * 512 / (1 << params.nPosFilterBits);
+        const uint64_t inflate = 80ULL * 512 / (1 << params.nMercuryPosFilterBits);
 
         // check overflow
         if (block.nNonce > std::numeric_limits<uint64_t>::max() / inflate)
@@ -279,12 +373,7 @@ static uint64_t CalculateUnformattedDeadline(const CBlockIndex& prevBlockIndex, 
         return (nMainDeadline + nSubDeadline) * prevBlockIndex.nBaseTarget;
     }
 
-    // 2.for PoC block
-
-    // Regtest use nonce as deadline
-    if (params.fAllowMinDifficultyBlocks)
-        return block.nNonce * prevBlockIndex.nBaseTarget;
-
+    // 3.for PoC block
     return CalcDL(prevBlockIndex.nHeight + 1, prevBlockIndex.GetNextGenerationSignature(), block.nPlotterId, block.nNonce, params);
 }
 
@@ -298,6 +387,13 @@ uint64_t CalculateBaseTarget(const CBlockIndex& prevBlockIndex, const CBlockHead
 {
     const int N = 80; // About 4 hours
     int nHeight = prevBlockIndex.nHeight + 1;
+
+    // intercept for PoS block
+    if (nHeight >= params.nSaturnActiveHeight - 1 && nHeight < params.nSaturnActiveHeight + N) {
+        // initial PoS base target: about 200k coins
+        return INITIAL_BASE_TARGET / 10 * params.nPowTargetSpacing;
+    }
+
     if (nHeight <= 1 + N) {
         // genesis block & pre-mining block & const block
         return INITIAL_BASE_TARGET;
@@ -344,6 +440,9 @@ static uint64_t addNonce(uint64_t& bestDeadline, const CBlockIndex& miningBlockI
     bool fCheckBind, const Consensus::Params& params)
 {
     AssertLockHeld(cs_main);
+
+    if (miningBlockIndex.nHeight > params.nSaturnActiveHeight)
+        throw JSONRPCError(RPC_INVALID_REQUEST, "Disabled");
 
     const uint64_t calcUnformattedDeadline = CalculateUnformattedDeadline(miningBlockIndex, block, params);
     if (calcUnformattedDeadline == INVALID_DEADLINE)
@@ -477,7 +576,7 @@ uint64_t AddNonce(uint64_t& bestDeadline, const CBlockIndex& miningBlockIndex,
 }
 
 uint64_t AddProofOfSpace(uint64_t& bestDeadline, const CBlockIndex& miningBlockIndex,
-    const CProofOfSpace& pos, const std::string& generateTo,
+    const CChiaProofOfSpace& pos, const std::string& generateTo,
     bool fCheckBind, const Consensus::Params& params)
 {
     AssertLockHeld(cs_main);
@@ -666,6 +765,7 @@ bool StartPOC()
     if (gArgs.GetBoolArg("-server", false)) {
         LogPrintf("Starting PoC forge thread\n");
         threadCheckDeadline = std::thread(CheckDeadlineThread);
+        threadGenearetePoolsDeadline = std::thread(GenearetePoolsDeadlineThread);
 
         // import private key
         if (gArgs.IsArgSet("-signprivkey")) {
@@ -715,6 +815,8 @@ void StopPOC()
 {
     if (threadCheckDeadline.joinable())
         threadCheckDeadline.join();
+    if (threadGenearetePoolsDeadline.joinable())
+        threadGenearetePoolsDeadline.join();
 
     mapSignaturePrivKeys.clear();
 

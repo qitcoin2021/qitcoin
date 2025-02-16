@@ -15,6 +15,7 @@
 #include <core_io.h>
 #include <hash.h>
 #include <index/blockfilterindex.h>
+#include <key_io.h>
 #include <poc/poc.h>
 #include <policy/feerate.h>
 #include <policy/policy.h>
@@ -120,10 +121,13 @@ UniValue blockheaderToJSON(const CBlockIndex* tip, const CBlockIndex* blockindex
     } else {
         result.pushKV("deadline", (uint64_t)0);
     }
-    result.pushKV("generator", HexStr(ExtractAccountID(blockindex->minerRewardTxOut.scriptPubKey)));
+    result.pushKV("generator", EncodeDestination(ExtractDestination(blockindex->minerRewardTxOut.scriptPubKey)));
     if (blockindex->nHeight > 1) {
         result.pushKV("pubkey", HexStr(blockindex->vchPubKey));
         result.pushKV("signature", HexStr(blockindex->vchSignature));
+    }
+    if (!blockindex->minerRewardTxOut.payload.empty()) {
+        result.pushKV("requireGenerator", EncodeDestination(ExtractDestination(blockindex->minerRewardTxOut.payload)));
     }
 
     if (blockindex->pprev)
@@ -194,10 +198,13 @@ UniValue blockToJSON(const CBlock& block, const CBlockIndex* tip, const CBlockIn
     } else {
         result.pushKV("deadline", (uint64_t)0);
     }
-    result.pushKV("generator", HexStr(ExtractAccountID(blockindex->minerRewardTxOut.scriptPubKey)));
+    result.pushKV("generator", EncodeDestination(ExtractDestination(blockindex->minerRewardTxOut.scriptPubKey)));
     if (blockindex->nHeight > 1) {
         result.pushKV("pubkey", HexStr(blockindex->vchPubKey));
         result.pushKV("signature", HexStr(blockindex->vchSignature));
+    }
+    if (!blockindex->minerRewardTxOut.payload.empty()) {
+        result.pushKV("requireGenerator", EncodeDestination(ExtractDestination(blockindex->minerRewardTxOut.payload)));
     }
 
     if (blockindex->pprev)
@@ -2320,6 +2327,213 @@ static UniValue getblockfilter(const JSONRPCRequest& request)
     return ret;
 }
 
+static UniValue getstakingepoch(const JSONRPCRequest& request)
+{
+    RPCHelpMan{"getstakingepoch",
+                "\nget epoch information.\n",
+                {
+                    {"hash_or_height", RPCArg::Type::NUM, RPCArg::Optional::NO, "The block hash or height of the target block", "", {"", "string or numeric"}},
+                },
+                RPCResult{
+                    "{\n"
+                    "  \"epoch_hash\" : (string) The hash of the epoch\n"
+                    "}\n"
+                },
+                RPCExamples{
+                    HelpExampleCli("getstakingepoch", "\"00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09\"")
+                }
+            }.Check(request);
+
+    LOCK(cs_main);
+
+    auto& consensusParams = Params().GetConsensus();
+
+    CBlockIndex* pindex;
+    if (request.params[0].isNum()) {
+        const int height = request.params[0].get_int();
+        const int current_tip = ::ChainActive().Height();
+        if (height < 0) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Target block height %d is negative", height));
+        }
+        if (height > current_tip) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Target block height %d after current tip %d", height, current_tip));
+        }
+
+        pindex = ::ChainActive()[height];
+    } else {
+        const uint256 hash(ParseHashV(request.params[0], "hash_or_height"));
+        pindex = LookupBlockIndex(hash);
+        if (!pindex) {
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Block not found");
+        }
+    }
+
+    assert(pindex != nullptr);
+    if (pindex->nHeight < Params().GetConsensus().nSaturnActiveHeight) {
+        throw JSONRPCError(RPC_INTERNAL_ERROR, "Epoch init block not found");
+    }
+
+    const CBlockIndex* pEpochInitIndex = GetEpochInitIndex(pindex, consensusParams);
+    assert(pEpochInitIndex != nullptr);
+
+    UniValue ret(UniValue::VOBJ);
+    ret.pushKV("epoch_hash", pEpochInitIndex->GetBlockHash().GetHex());
+    ret.pushKV("from_height", pEpochInitIndex->nHeight + 1);
+    ret.pushKV("to_height", pEpochInitIndex->nHeight + Params().GetConsensus().nSaturnEpockBlocks);
+    return ret;
+}
+
+static UniValue getstakingpools(const JSONRPCRequest& request)
+{
+    RPCHelpMan{"getstakingpools",
+                "\nget staking pools.\n",
+                {
+                    {"epoch_hash", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The hash of the epoch"},
+                },
+                RPCResult{
+                    "{\n"
+                    "}\n"
+                },
+                RPCExamples{
+                    HelpExampleCli("getstakingpools", "\"00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09\"")
+                }
+            }.Check(request);
+
+    LOCK(cs_main);
+
+    uint256 epochHash(ParseHashV(request.params[0], "epoch_hash"));
+
+    UniValue ret(UniValue::VOBJ);
+
+    UniValue pools(UniValue::VARR);
+    for (const auto &pool : ::ChainstateActive().CoinsTip().GetStakingPools(epochHash)) {
+        UniValue poolObj(UniValue::VOBJ);
+        poolObj.pushKV("address", EncodeDestination(ExtractDestination(pool.poolID)));
+
+        UniValue posObj(UniValue::VOBJ);
+        posObj.pushKV("hash", pool.poolPos.hash.GetHex());
+        posObj.pushKV("n", (uint64_t) pool.poolPos.n);
+        poolObj.pushKV("position", posObj);
+
+        poolObj.pushKV("stake_amount", pool.stakeAmount);
+        pools.push_back(poolObj);
+    }
+    ret.pushKV("pools", pools);
+
+    return ret;
+}
+
+static UniValue getstakingpool(const JSONRPCRequest& request)
+{
+    RPCHelpMan{"getstakingpool",
+                "\nget staking pool information.\n",
+                {
+                    {"epoch_hash", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The hash of the epoch"},
+                    {"pool_addres", RPCArg::Type::STR, RPCArg::Optional::NO, "The address of the pool"},
+                },
+                RPCResult{
+                    "{\n"
+                    "}\n"
+                },
+                RPCExamples{
+                    HelpExampleCli("getstakingpool", std::string("\"00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09\" \"") + Params().GetConsensus().FundAddress + "\"")
+                }
+            }.Check(request);
+
+    LOCK(cs_main);
+
+    uint256 epochHash(ParseHashV(request.params[0], "epoch_hash"));
+
+    // address
+    if (!request.params[1].isStr()) {
+        throw JSONRPCError(RPC_TYPE_ERROR, "Invalid pool address");
+    }
+    const CAccountID poolID = ExtractAccountID(DecodeDestination(request.params[1].get_str()));
+    if (poolID.IsNull()) {
+        throw JSONRPCError(RPC_TYPE_ERROR, "Invalid pool address, must from Qitcoin wallet (P2SH address)");
+    }
+
+    UniValue ret(UniValue::VOBJ);
+    ret.pushKV("address", EncodeDestination(ExtractDestination(poolID)));
+
+    UniValue poolUsers(UniValue::VARR);
+    CAmount poolStakeAmount = 0;
+    for (auto &poolUser : ::ChainstateActive().CoinsTip().GetStakingPoolUsers(epochHash, poolID)) {
+        poolStakeAmount += poolUser.stakeAmount;
+
+        UniValue userObj(UniValue::VOBJ);
+        userObj.pushKV("address", EncodeDestination(ExtractDestination(poolUser.accountID)));
+        userObj.pushKV("stake_amount", ValueFromAmount(poolUser.stakeAmount));
+        userObj.pushKV("withdrawable_amount", ValueFromAmount(poolUser.withdrawableAmount));
+        poolUsers.push_back(userObj);
+    }
+    ret.pushKV("users", poolUsers);
+    ret.pushKV("stake_amount", poolStakeAmount);
+
+    return ret;
+}
+
+static UniValue getstakingpooluser(const JSONRPCRequest& request)
+{
+    RPCHelpMan{"getstakingpooluser",
+                "\nget staking user.\n",
+                {
+                    {"pool_addres", RPCArg::Type::STR, RPCArg::Optional::NO, "The address of the pool"},
+                    {"user_addres", RPCArg::Type::STR, RPCArg::Optional::NO, "The address of the pool user"},
+                },
+                RPCResult{
+                    "{\n"
+                    "}\n"
+                },
+                RPCExamples{
+                    HelpExampleCli("getstakingpooluser", std::string("\"") + Params().GetConsensus().FundAddress + "\" \"" + Params().GetConsensus().FundAddress + "\"")
+                }
+            }.Check(request);
+
+    LOCK(cs_main);
+
+    auto& consensusParams = Params().GetConsensus();
+
+    // pool address
+    if (!request.params[0].isStr()) {
+        throw JSONRPCError(RPC_TYPE_ERROR, "Invalid pool address");
+    }
+    const CAccountID poolID = ExtractAccountID(DecodeDestination(request.params[0].get_str()));
+    if (poolID.IsNull()) {
+        throw JSONRPCError(RPC_TYPE_ERROR, "Invalid pool address, must from Qitcoin wallet (P2SH address)");
+    }
+
+    // user address
+    if (!request.params[1].isStr()) {
+        throw JSONRPCError(RPC_TYPE_ERROR, "Invalid user address");
+    }
+    const CAccountID userID = ExtractAccountID(DecodeDestination(request.params[1].get_str()));
+    if (userID.IsNull()) {
+        throw JSONRPCError(RPC_TYPE_ERROR, "Invalid user address, must from Qitcoin wallet (P2SH address)");
+    }
+
+    const CBlockIndex *pindex = ::ChainActive().Tip();
+    const CBlockIndex* pEpochInitIndex = GetEpochInitIndex(pindex, consensusParams);
+    if (!pEpochInitIndex) {
+        throw JSONRPCError(RPC_INTERNAL_ERROR, "Epoch init block not found");
+    }
+
+    UniValue ret(UniValue::VOBJ);
+    ret.pushKV("epoch_hash", pEpochInitIndex->GetBlockHash().GetHex());
+    ret.pushKV("pool_address", EncodeDestination(ExtractDestination(poolID)));
+    ret.pushKV("user_address", EncodeDestination(ExtractDestination(userID)));
+
+    for (auto &poolUser : ::ChainstateActive().CoinsTip().GetStakingPoolUsers(pEpochInitIndex->GetBlockHash(), poolID)) {
+        if (poolUser.accountID == userID) {
+            ret.pushKV("stake_amount", ValueFromAmount(poolUser.stakeAmount));
+            ret.pushKV("withdrawable_amount", ValueFromAmount(poolUser.withdrawableAmount));
+            break;
+        }
+    }
+
+    return ret;
+}
+
 // clang-format off
 static const CRPCCommand commands[] =
 { //  category              name                      actor (function)         argNames
@@ -2348,6 +2562,11 @@ static const CRPCCommand commands[] =
     { "blockchain",         "preciousblock",          &preciousblock,          {"blockhash"} },
     { "blockchain",         "scantxoutset",           &scantxoutset,           {"action", "scanobjects"} },
     { "blockchain",         "getblockfilter",         &getblockfilter,         {"blockhash", "filtertype"} },
+
+    { "blockchain",         "getstakingepoch",        &getstakingepoch,         {"hash_or_height"} },
+    { "blockchain",         "getstakingpools",        &getstakingpools,         {"epoch_hash"} },
+    { "blockchain",         "getstakingpool",         &getstakingpool,          {"epoch_hash","pool_addres"} },
+    { "blockchain",         "getstakingpooluser",     &getstakingpooluser,      {"pool_addres","user_address"} },
 
     /* Not shown in help */
     { "hidden",             "invalidateblock",        &invalidateblock,        {"blockhash"} },

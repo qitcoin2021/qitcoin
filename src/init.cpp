@@ -1738,7 +1738,7 @@ bool AppInitMain(InitInterfaces& interfaces)
                         LOCK(cs_main);
                         CBlockIndex* tip = ::ChainActive().Tip();
                         RPCNotifyBlockChange(true, tip);
-                        if (tip && tip->nTime > GetAdjustedTime() + MAX_FUTURE_BLOCK_TIME) {
+                        if (tip && tip->nTime > GetAdjustedTime() + MAX_FUTURE_BLOCK_TIME && !chainparams.GetConsensus().fAllowMinDifficultyBlocks) {
                             strLoadError = _("The block database contains a block which appears to be from the future. "
                                     "This may be due to your computer's date and time being set incorrectly. "
                                     "Only rebuild the block database if you are sure that your computer's date and time are correct").translated;

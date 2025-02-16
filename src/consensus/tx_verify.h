@@ -28,8 +28,10 @@ struct Params;
  * @param[out] txfee Set to the transaction fee if successful.
  * Preconditions: tx.IsCoinBase() is false.
  */
-bool CheckTxInputs(const CTransaction& tx, CValidationState& state, const CCoinsViewCache& inputs, const CCoinsViewCache& prevInputs, 
-    int nSpendHeight, CAmount& txfee, const Params& params);
+bool CheckTxInputs(const CTransaction& tx, CValidationState& state, const CCoinsViewCache& inputs, const CCoinsViewCache& prevInputs,
+    int nSpendHeight, CAmount& txfee,
+    const uint256 &epochHash,
+    const Params& params);
 
 /** Get bind/unbind plotter transaction lock height. */
 int GetBindPlotterLimitHeight(int nBindHeight, const CBindPlotterInfo& lastBindInfo, const Params& params);

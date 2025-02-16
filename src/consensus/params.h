@@ -68,11 +68,17 @@ struct Params {
     /** Pledge low ratio to miner. 1000% */
     int nPledgeLowRewardRatio;
 
-    /** Mercury: PoS, POS */
+    /** Mercury: Chia PoS */
     int nMercuryActiveHeight;
+    /** Mercury: Support Chia PoS */
+    int nMercuryPosFilterBits;
 
-    /** Support PoS */
-    int nPosFilterBits;
+    /** Saturn: DPoS */
+    int nSaturnActiveHeight;
+    /** Saturn: Staking genesis ID */
+    uint160 SaturnStakingGenesisID;
+    /** Saturn: Blocks per Epoch */
+    int nSaturnEpockBlocks;
 
     /**
      * Minimum blocks including miner confirmation of the total of 2016 blocks in a retargeting period,

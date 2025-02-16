@@ -682,7 +682,8 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
         return state.Invalid(ValidationInvalidReason::TX_PREMATURE_SPEND, false, REJECT_NONSTANDARD, "non-BIP68-final");
 
     CAmount nFees = 0;
-    if (!Consensus::CheckTxInputs(tx, state, m_view, coins_cache, GetSpendHeight(m_view), nFees, chainparams.GetConsensus())) {
+    const uint256 spendEpochHash = GetSpendEpochHash(m_view, chainparams.GetConsensus());
+    if (!Consensus::CheckTxInputs(tx, state, m_view, coins_cache, GetSpendHeight(m_view), nFees, spendEpochHash, chainparams.GetConsensus())) {
         return error("%s: Consensus::CheckTxInputs: %s, %s", __func__, tx.GetHash().ToString(), FormatStateMessage(state));
     }
 
@@ -1265,15 +1266,19 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
     return nSubsidy;
 }
 
-std::vector<CTxOut> GetBlockReward(const CBlockIndex* pindexPrev, const CAmount& nFees, const CAccountID& generatorID, const uint64_t& nPlotterId, const CCoinsViewCache& view, const Consensus::Params& consensusParams)
+std::vector<CTxOut> GetBlockReward(const CBlockIndex* pindexPrev, const CAmount& nFees, const CAccountID& generatorID, uint64_t nPlotterId, const CCoinsViewCache& view, const Consensus::Params& consensusParams)
 {
     const int nHeight = pindexPrev ? (pindexPrev->nHeight + 1) : 0;
-    const CAmount nSubsidy = GetBlockSubsidy(nHeight, consensusParams) + nFees;
+    const CAmount nBlockSubsidy = GetBlockSubsidy(nHeight, consensusParams);
+    const CAmount nSubsidy = nBlockSubsidy + nFees;
 
     std::vector<CTxOut> vTxOut;
 
     if (nSubsidy == 0)
+    {
+        vTxOut.push_back(CTxOut(0, GetScriptForAccountID(generatorID)));
         return vTxOut;
+    }
 
     if (nHeight == 1)
     {
@@ -1282,12 +1287,13 @@ std::vector<CTxOut> GetBlockReward(const CBlockIndex* pindexPrev, const CAmount&
             vTxOut.push_back(CTxOut(nSubsidy, GetScriptForDestination(DecodeDestination(address))));
         }
     }
-    else
+    else if (nHeight < consensusParams.nSaturnActiveHeight)
     {
+        // PoC
         if (nHeight < consensusParams.nBindPlotterCheckHeight)
         {
             // all reward to miner
-            vTxOut.push_back(CTxOut(nSubsidy, CScript()));
+            vTxOut.push_back(CTxOut(nSubsidy, GetScriptForAccountID(generatorID)));
         }
         else
         {
@@ -1295,9 +1301,9 @@ std::vector<CTxOut> GetBlockReward(const CBlockIndex* pindexPrev, const CAmount&
             const CAmount balancePointReceived = view.GetAccountPointReceivedBalance(generatorID);
             const CAmount miningRequireBalance = poc::GetMiningRequireBalance(generatorID, nPlotterId, nHeight, view, nullptr, consensusParams);
             if (balancePointReceived >= miningRequireBalance) {
-                vTxOut.push_back(CTxOut((nSubsidy * consensusParams.nPledgeFullRewardRatio) / 1000, CScript()));
+                vTxOut.push_back(CTxOut((nSubsidy * consensusParams.nPledgeFullRewardRatio) / 1000, GetScriptForAccountID(generatorID)));
             } else {
-                vTxOut.push_back(CTxOut((nSubsidy * consensusParams.nPledgeLowRewardRatio) / 1000, CScript()));
+                vTxOut.push_back(CTxOut((nSubsidy * consensusParams.nPledgeLowRewardRatio) / 1000, GetScriptForAccountID(generatorID)));
             }
 
             // staking to top N
@@ -1326,12 +1332,70 @@ std::vector<CTxOut> GetBlockReward(const CBlockIndex* pindexPrev, const CAmount&
         vTxOut[0].nValue = (vTxOut[0].nValue * 20) / 100;
         for (const CBlockIndex* pindex = pindexPrev;
                pindex != nullptr && pindex->nHeight > 1 && pindex->nHeight >= pindexPrev->nHeight - 86400;
-               pindex = pindex->GetAncestor(pindex->nHeight - 5400)) {
+               pindex = pindex->GetAncestor(pindex->nHeight - 5400))
+        {
             vTxOut.push_back(CTxOut(pindex->minerRewardTxOut.nValue / 4, pindex->minerRewardTxOut.scriptPubKey)); // 5%
         }
+    } else {
+        // PoS
+        const CAmount nGeneratorSubsidy = std::max(nSubsidy - nBlockSubsidy * 60 / 100, (CAmount) 0); // fees + 40% to generator
+        vTxOut.push_back(CTxOut(nGeneratorSubsidy, GetScriptForAccountID(generatorID)));
     }
 
     return vTxOut;
+}
+
+CAmount GetInitialStakingPoolAmount(int nHeight, const Consensus::Params& consensusParams)
+{
+    const CAmount maxInitialAmount = 10000 * COIN;
+    const CAmount minInitialAmount = maxInitialAmount / 10;
+
+    if (nHeight == 1) {
+        return maxInitialAmount;
+    }
+    nHeight += 2 * (10500000 / 75); // trade off to blocks: 10% + 10%
+
+    CAmount nInitialAmount;
+    int halvings = nHeight / consensusParams.nSubsidyHalvingInterval;
+    if (halvings >= 64) {
+        // Force amount to zero when right shift is undefined.
+        nInitialAmount = 0;
+    } else {
+        nInitialAmount = maxInitialAmount >> halvings;
+    }
+
+    return std::max(nInitialAmount, minInitialAmount);
+}
+
+CAmount GetBlockStakingPoolSubsidy(int nHeight, const Consensus::Params& consensusParams)
+{
+    return GetBlockSubsidy(nHeight, consensusParams) * 60 / 100; // 60% to staking pool
+}
+
+const CBlockIndex* GetEpochInitIndex(const CBlockIndex* pindex, const Consensus::Params& consensusParams)
+{
+    if (!pindex)
+        return nullptr;
+
+    const int targetHeight = pindex->nHeight / consensusParams.nSaturnEpockBlocks * consensusParams.nSaturnEpockBlocks;
+    return pindex->GetAncestor(targetHeight);
+}
+
+uint256 GetEpochHash(const CBlockIndex* pindex, const Consensus::Params& consensusParams)
+{
+    const CBlockIndex* epochInit = GetEpochInitIndex(pindex, consensusParams);
+    return epochInit ? epochInit->GetBlockHash() : uint256();
+}
+
+uint256 GetCurrentEpochHash(const Consensus::Params& consensusParams)
+{
+    return GetEpochHash(::ChainActive().Tip(), consensusParams);
+}
+
+uint256 GetSpendEpochHash(const CCoinsViewCache& inputs, const Consensus::Params& params)
+{
+    LOCK(cs_main);
+    return GetEpochHash(LookupBlockIndex(inputs.GetBestBlock()), params);
 }
 
 CoinsViews::CoinsViews(
@@ -2081,6 +2145,8 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
 
     CCheckQueueControl<CScriptCheck> control(fScriptChecks && nScriptCheckThreads ? &scriptcheckqueue : nullptr);
 
+    const uint256 epochHash = GetEpochHash(pindex->pprev, chainparams.GetConsensus());
+
     std::vector<int> prevheights;
     CAmount nFees = 0;
     int nInputs = 0;
@@ -2098,7 +2164,7 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
         if (!tx.IsCoinBase())
         {
             CAmount txfee = 0;
-            if (!Consensus::CheckTxInputs(tx, state, mutableView, view, pindex->nHeight, txfee, chainparams.GetConsensus())) {
+            if (!Consensus::CheckTxInputs(tx, state, mutableView, view, pindex->nHeight, txfee, epochHash, chainparams.GetConsensus())) {
                 if (!IsBlockReason(state.GetReason())) {
                     // CheckTxInputs may return MISSING_INPUTS or
                     // PREMATURE_SPEND but we can't return that, as it's not
@@ -2177,14 +2243,53 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
                         REJECT_INVALID, "bad-cb-address");
     }
 
-    // Check bind
-    if (pindex->nHeight >= chainparams.GetConsensus().nBindPlotterCheckHeightV2 &&
-        (fCheckWork || pindex->nHeight > chainparams.GetLastCheckpointHeight()) && /* If force check or after checkpoint then enable bind verify */
-        !view.AccountHaveActiveBindPlotter(generatorID, pindex->nPlotterId)) {
-        std::string address = EncodeDestination(ExtractDestination(block.vtx[0]->vout[0].scriptPubKey));
-        return state.Invalid(ValidationInvalidReason::CONSENSUS,
-                        error("ConnectBlock(): Not active bind %" PRIu64 " to %s", pindex->nPlotterId, address),
-                        REJECT_INVALID, "bad-cb-bindplotter");
+    if (pindex->nHeight < chainparams.GetConsensus().nSaturnActiveHeight) {
+        // Check bind
+        if (pindex->nHeight >= chainparams.GetConsensus().nBindPlotterCheckHeightV2 &&
+            (fCheckWork || pindex->nHeight > chainparams.GetLastCheckpointHeight()) && /* If force check or after checkpoint then enable bind verify */
+            !view.AccountHaveActiveBindPlotter(generatorID, pindex->nPlotterId) &&
+            !chainparams.GetConsensus().fAllowMinDifficultyBlocks) {
+            std::string address = EncodeDestination(ExtractDestination(block.vtx[0]->vout[0].scriptPubKey));
+            return state.Invalid(ValidationInvalidReason::CONSENSUS,
+                            error("ConnectBlock(): Not active bind %" PRIu64 " to %s", pindex->nPlotterId, address),
+                            REJECT_INVALID, "bad-cb-bindplotter");
+        }
+    } else {
+        // Check plotterID
+        if (pindex->nPlotterId != generatorID.GetUint64(0)) {
+            return state.Invalid(ValidationInvalidReason::CONSENSUS,
+                            error("ConnectBlock(): Not valid plotter id %" PRIu64 " <-> %s", pindex->nPlotterId, generatorID.ToString()),
+                            REJECT_INVALID, "bad-cb-plotterid");
+        }
+
+        // Check pool
+        bool fValidPool = false;
+        if (pindex->nNonce == 0) {
+            for (auto const &address : chainparams.GetConsensus().vFundAddressPool) {
+                if (ExtractAccountID(DecodeDestination(address)) == generatorID) {
+                    fValidPool = true;
+                    break;
+                }
+            }
+        }
+        if (!fValidPool && pindex->nNonce != 0) {
+            for (auto const &pool : view.GetStakingPools(epochHash)) {
+                if (pool.poolID == generatorID) {
+                    if (pindex->nNonce <= (uint64_t) (pool.stakeAmount / COIN)) {
+                        fValidPool = true;
+                    }
+                    break;
+                }
+            }
+        }
+        if (!fValidPool && chainparams.GetConsensus().fAllowMinDifficultyBlocks) {
+            fValidPool = true;
+        }
+        if (!fValidPool) {
+            return state.Invalid(ValidationInvalidReason::CONSENSUS,
+                                 error("ConnectBlock(): Not valid pool %s", generatorID.ToString()),
+                                 REJECT_INVALID, "bad-cb-generator");
+        }
     }
 
     // GetBlockReward() must use pre CCoinsView
@@ -2196,7 +2301,7 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
                         REJECT_INVALID, "bad-cb-count");
     }
     for (std::size_t i = 0; i < vReward.size(); i++) {
-        assert(i == 0 || !vReward[i].scriptPubKey.empty());
+        assert(!vReward[i].scriptPubKey.empty());
 
         // amount
         if (vReward[i].nValue != block.vtx[0]->vout[i].nValue)
@@ -2206,7 +2311,7 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
                         REJECT_INVALID, "bad-cb-amount");
 
         // script
-        const CScript &scriptPubKey = (i == 0) ? pindex->minerRewardTxOut.scriptPubKey : vReward[i].scriptPubKey;
+        const CScript &scriptPubKey = vReward[i].scriptPubKey;
         if (scriptPubKey != block.vtx[0]->vout[i].scriptPubKey)
             return state.Invalid(ValidationInvalidReason::CONSENSUS,
                         error("ConnectBlock(): coinbase script missing match (index=%d, actual=%s, require=%s)",
@@ -2643,7 +2748,7 @@ bool CChainState::ConnectTip(CValidationState& state, const CChainParams& chainp
     int64_t nTime4 = GetTimeMicros(); nTimeFlush += nTime4 - nTime3;
     LogPrint(BCLog::BENCH, "  - Flush: %.2fms [%.2fs (%.2fms/blk)]\n", (nTime4 - nTime3) * MILLI, nTimeFlush * MICRO, nTimeFlush * MILLI / nBlocksTotal);
     // Write the chain state to disk, if necessary.
-    if (!FlushStateToDisk(chainparams, state, (pindexNew->nHeight == 0 || pindexNew->nHeight%2000 != 0)?FlushStateMode::IF_NEEDED:FlushStateMode::ALWAYS))
+    if (!FlushStateToDisk(chainparams, state, (pindexNew->nHeight == 0 || pindexNew->nHeight%chainparams.GetConsensus().nSaturnEpockBlocks != 0)?FlushStateMode::IF_NEEDED:FlushStateMode::ALWAYS))
         return false;
     int64_t nTime5 = GetTimeMicros(); nTimeChainState += nTime5 - nTime4;
     LogPrint(BCLog::BENCH, "  - Writing chainstate: %.2fms [%.2fs (%.2fms/blk)]\n", (nTime5 - nTime4) * MILLI, nTimeChainState * MICRO, nTimeChainState * MILLI / nBlocksTotal);
@@ -3401,13 +3506,14 @@ static bool CheckBlockHeader(const CBlockHeader& block, CValidationState& state,
 
     // PoS
     if (!block.pos.IsNull()) {
-        if (pindexPrev->nHeight >= chainparams.GetConsensus().nMercuryActiveHeight) {
+        if (pindexPrev->nHeight >= chainparams.GetConsensus().nMercuryActiveHeight &&
+            pindexPrev->nHeight <= chainparams.GetConsensus().nSaturnActiveHeight) {
             pos::VerifyResult result = pos::VerifyBlockHeader(*pindexPrev, block, chainparams.GetConsensus());
             if (result != pos::VerifyResult::Success) {
-                return state.Invalid(ValidationInvalidReason::BLOCK_INVALID_HEADER, false, REJECT_INVALID, "bad-blk-pos", pos::ToString(result));
+                return state.Invalid(ValidationInvalidReason::BLOCK_INVALID_HEADER, false, REJECT_INVALID, "bad-blk-chiapos", pos::ToString(result));
             }
         } else {
-            return state.Invalid(ValidationInvalidReason::BLOCK_INVALID_HEADER, false, REJECT_INVALID, "bad-blk-pos", "not allow pos");
+            return state.Invalid(ValidationInvalidReason::BLOCK_INVALID_HEADER, false, REJECT_INVALID, "bad-blk-chiapos", "not allow chiapos");
         }
     }
 
@@ -3633,10 +3739,12 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationSta
         return state.Invalid(ValidationInvalidReason::BLOCK_INVALID_HEADER, false, REJECT_INVALID, "time-too-old", "block's timestamp is too early");
 
     // Check timestamp
-    if (block.GetBlockTime() > nAdjustedTime + 600)
-        return state.Invalid(ValidationInvalidReason::BLOCK_TIME_LONG_FUTURE, false, REJECT_INVALID, "time-too-new", "block timestamp too far in the future");
-    if (block.GetBlockTime() > nAdjustedTime + MAX_FUTURE_BLOCK_TIME)
-        return state.Invalid(ValidationInvalidReason::BLOCK_TIME_FUTURE, false, REJECT_INVALID, "time-too-new", strprintf("block timestamp too far in the future %d seconds", block.GetBlockTime() - nAdjustedTime));
+    if (!consensusParams.fAllowMinDifficultyBlocks) {
+        if (block.GetBlockTime() > nAdjustedTime + 600)
+            return state.Invalid(ValidationInvalidReason::BLOCK_TIME_LONG_FUTURE, false, REJECT_INVALID, "time-too-new", "block timestamp too far in the future");
+        if (block.GetBlockTime() > nAdjustedTime + MAX_FUTURE_BLOCK_TIME)
+            return state.Invalid(ValidationInvalidReason::BLOCK_TIME_FUTURE, false, REJECT_INVALID, "time-too-new", strprintf("block timestamp too far in the future %d seconds", block.GetBlockTime() - nAdjustedTime));
+    }
 
     // Reject outdated version blocks when 95% (75% on testnet) of the network has upgraded:
     // check for version 2, 3 and 4 upgrades

@@ -670,10 +670,10 @@ CScript GetPointScriptForDestination(const CTxDestination& dest, int lockBlocks)
 
 CAmount GetPointAmount(CAmount amount, int lockBlocks)
 {
-    if (lockBlocks == 360 * 480) {
+    if (lockBlocks == PROTOCOL_POINT_LOCK_BLOCKS_HALF_AMOUNT) {
         return amount / 2;
     }
-    if (lockBlocks == 540 * 480) {
+    if (lockBlocks == PROTOCOL_POINT_LOCK_BLOCKS_FULL_AMOUNT) {
         return amount;
     }
 
@@ -696,14 +696,34 @@ CScript GetStakingScriptForDestination(const CTxDestination& dest, int lockBlock
 
 CAmount GetStakingAmount(CAmount amount, int lockBlocks)
 {
-    if (lockBlocks == 360 * 480) {
+    if (lockBlocks == PROTOCOL_STAKING_LOCK_BLOCKS_HALF_AMOUNT) {
         return amount / 2;
     }
-    if (lockBlocks == 540 * 480) {
+    if (lockBlocks == PROTOCOL_STAKING_LOCK_BLOCKS_FULL_AMOUNT) {
         return amount;
     }
 
     return 0;
+}
+
+CAmount CalcStakePoolUserReward(CAmount poolReward, CAmount userStakeAmount, CAmount poolStakeAmount)
+{
+    userStakeAmount /= COIN;
+    poolStakeAmount /= COIN;
+    if (userStakeAmount <= 0 || poolStakeAmount <= 0)
+        return 0;
+
+    return poolReward * userStakeAmount / poolStakeAmount;
+}
+
+COutPoint CreateStakePendingCoinOutPoint(const uint256 &epochHash, const CAccountID &poolID, const CAccountID &accountID)
+{
+    uint256 result;
+    CSHA256().Write(epochHash.begin(), uint256::WIDTH)
+             .Write(poolID.begin(), CAccountID::WIDTH)
+             .Write(accountID.begin(), CAccountID::WIDTH)
+             .Finalize((unsigned char*)&result);
+    return COutPoint(result, COutPoint::STAKING_WITHDRAW_COIN_INDEX);
 }
 
 CTxOutPayloadRef ExtractTxoutPayload(const CTxOut& txout, int nHeight, const std::set<TxOutType> &filters, bool for_test, std::map<std::string,std::string> *pinfo)

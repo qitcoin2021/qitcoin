@@ -72,14 +72,19 @@ void BlockAssembler::resetBlock()
     // These counters do not include coinbase tx
     nBlockTx = 0;
     nFees = 0;
+
+    epochHash.SetNull();
 }
 
 Optional<int64_t> BlockAssembler::m_last_block_num_txs{nullopt};
 Optional<int64_t> BlockAssembler::m_last_block_weight{nullopt};
 
 std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& scriptPubKeyIn,
-    const CProofOfSpace &pos, uint64_t plotterId, uint64_t nonce,
-    uint64_t deadline, const std::shared_ptr<CKey> privKey)
+    uint64_t nonce,
+    uint64_t deadline,
+    uint64_t plotterId,
+    const CChiaProofOfSpace &pos,
+    const std::shared_ptr<CKey> privKey)
 {
     int64_t nTimeStart = GetTimeMicros();
 
@@ -103,6 +108,7 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     CBlockIndex* pindexPrev = ::ChainActive().Tip();
     assert(pindexPrev != nullptr);
     nHeight = pindexPrev->nHeight + 1;
+    epochHash = GetEpochHash(pindexPrev, chainparams.GetConsensus());
 
     pblock->nVersion = ComputeBlockVersion(pindexPrev, chainparams.GetConsensus());
     // -regtest only: allow overriding block.nVersion with
@@ -164,13 +170,7 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     coinbaseTx.vin[0].scriptSig = (CScript() << nHeight << CScriptNum(static_cast<int64_t>(nonce)) << CScriptNum(static_cast<int64_t>(plotterId))) + COINBASE_FLAGS;
     assert(coinbaseTx.vin[0].scriptSig.size() <= 100);
     for (const CTxOut &txOut : GetBlockReward(pindexPrev, nFees, generatorID, plotterId, ::ChainstateActive().CoinsTip(), chainparams.GetConsensus())) {
-        assert(txOut.nValue > 0);
-        if (txOut.scriptPubKey.empty()) {
-            // [0]
-            coinbaseTx.vout.push_back(CTxOut(txOut.nValue, scriptPubKeyIn));
-        } else {
-            coinbaseTx.vout.push_back(txOut);
-        }
+        coinbaseTx.vout.push_back(txOut);
     }
     pblock->vtx[0] = MakeTransactionRef(std::move(coinbaseTx));
     pblocktemplate->vchCoinbaseCommitment = GenerateCoinbaseCommitment(*pblock, pindexPrev, chainparams.GetConsensus());
@@ -180,9 +180,9 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
 
     // Fill in header
     pblock->hashPrevBlock  = pindexPrev->GetBlockHash();
-    pblock->pos            = pos;
     pblock->nNonce         = nonce;
     pblock->nPlotterId     = plotterId;
+    pblock->pos            = pos;
     pblock->nBaseTarget    = poc::CalculateBaseTarget(*pindexPrev, *pblock, chainparams.GetConsensus());
 
     pblock->hashMerkleRoot = BlockMerkleRoot(*pblock);
@@ -453,7 +453,7 @@ void BlockAssembler::addPackageTxs(int &nPackagesSelected, int &nDescendantsUpda
             // Check transaction inputs and type
             CValidationState state;
             CAmount nFees;
-            if (!Consensus::CheckTxInputs(sortedEntries[i]->GetTx(), state, view, ::ChainstateActive().CoinsTip(), nHeight, nFees, chainparams.GetConsensus())) {
+            if (!Consensus::CheckTxInputs(sortedEntries[i]->GetTx(), state, view, ::ChainstateActive().CoinsTip(), nHeight, nFees, epochHash, chainparams.GetConsensus())) {
                 // All descendants move to failed
                 for (size_t j = i; j < sortedEntries.size(); ++j) {
                     failedTx.insert(sortedEntries[j]);

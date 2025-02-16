@@ -54,15 +54,15 @@ static UniValue generateBlocks(const CScript& coinbase_script, const std::shared
         nHeight = ::ChainActive().Height();
         nHeightEnd = nHeight+nGenerate;
     }
-    const uint64_t nPlotterId = 18378006326320094226ULL; // from "root minute ancient won check dove second spot book thump retreat add"
+    uint64_t nPlotterId = 18378006326320094226ULL; // from "root minute ancient won check dove second spot book thump retreat add"
     UniValue blockHashes(UniValue::VARR);
     while (nHeight < nHeightEnd && !ShutdownRequested())
     {
-        uint64_t nDeadline = static_cast<uint64_t>(Params().GetConsensus().nPowTargetSpacing);
-        if (nHeight <= 1) {
-            nDeadline = 0;
+        uint64_t nDeadline = Params().GetConsensus().nPowTargetSpacing;
+        if (nHeight + 1 >= Params().GetConsensus().nSaturnActiveHeight) {
+            nPlotterId = ExtractAccountID(coinbase_script).GetUint64(0);
         }
-        std::unique_ptr<CBlockTemplate> pblocktemplate(BlockAssembler(Params()).CreateNewBlock(coinbase_script, CProofOfSpace(), nPlotterId, nDeadline, nDeadline, private_key));
+        std::unique_ptr<CBlockTemplate> pblocktemplate(BlockAssembler(Params()).CreateNewBlock(coinbase_script, 1, nDeadline, nPlotterId, CChiaProofOfSpace(), private_key));
         if (!pblocktemplate.get())
             throw JSONRPCError(RPC_INTERNAL_ERROR, "Couldn't create new block");
         CBlock *pblock = &pblocktemplate->block;

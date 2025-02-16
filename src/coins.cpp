@@ -37,6 +37,8 @@ CAmount CCoinsView::GetAccountBalance(const CAccountID &accountID, CAmount *bala
 CBindPlotterCoinsMap CCoinsView::GetAccountBindPlotterEntries(const CAccountID &accountID, const uint64_t &plotterId) const { return {}; }
 CBindPlotterCoinsMap CCoinsView::GetBindPlotterEntries(const uint64_t &plotterId) const { return {}; }
 CAccountBalanceList CCoinsView::GetTopStakingAccounts(int n, const CCoinsMap &mapModifiedCoins) const { return {}; }
+CStakingPoolList CCoinsView::GetStakingPools(const uint256 &epochHash) const { return {}; }
+CStakingPoolUserList CCoinsView::GetStakingPoolUsers(const uint256 &epochHash, const CAccountID &poolID) const { return {}; }
 bool CCoinsView::HaveCoin(const COutPoint &outpoint) const {
     Coin coin;
     return GetCoin(outpoint, coin);
@@ -67,6 +69,12 @@ CBindPlotterCoinsMap CCoinsViewBacked::GetBindPlotterEntries(const uint64_t &plo
 }
 CAccountBalanceList CCoinsViewBacked::GetTopStakingAccounts(int n, const CCoinsMap &mapModifiedCoins) const {
     return base->GetTopStakingAccounts(n, mapModifiedCoins);
+}
+CStakingPoolList CCoinsViewBacked::GetStakingPools(const uint256 &epochHash) const {
+    return base->GetStakingPools(epochHash);
+}
+CStakingPoolUserList CCoinsViewBacked::GetStakingPoolUsers(const uint256 &epochHash, const CAccountID &poolID) const {
+    return base->GetStakingPoolUsers(epochHash, poolID);
 }
 
 SaltedOutpointHasher::SaltedOutpointHasher() : k0(GetRand(std::numeric_limits<uint64_t>::max())), k1(GetRand(std::numeric_limits<uint64_t>::max())) {}

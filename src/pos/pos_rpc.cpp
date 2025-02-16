@@ -60,7 +60,7 @@ static UniValue pos_getMiningInfo(const JSONRPCRequest& request)
     result.pushKV("challenge", HexStr(pindexMining->GetNextGenerationSignature()));
     result.pushKV("difficulty", poc::INITIAL_BASE_TARGET / pindexMining->nBaseTarget);
     result.pushKV("scan_iterations", (uint64_t) ((now - epoch) / Params().GetConsensus().nPowTargetSpacing));
-    result.pushKV("filter_bits", (uint64_t) Params().GetConsensus().nPosFilterBits);
+    result.pushKV("filter_bits", (uint64_t) Params().GetConsensus().nMercuryPosFilterBits);
     result.pushKV("epoch", (uint64_t) epoch);
     result.pushKV("now", (uint64_t) now);
 
@@ -84,7 +84,7 @@ static UniValue pos_submitProof(const JSONRPCRequest& request)
         );
     }
 
-    CProofOfSpace pos;
+    CChiaProofOfSpace pos;
     {
         uint256 rawChallenge(ParseHex(find_value(request.params, "challenge").get_str()));
         int nScanIterations = find_value(request.params, "scan_iterations").get_int();

@@ -187,7 +187,7 @@ public:
     uint64_t nBaseTarget;
     uint64_t nNonce;
     uint64_t nPlotterId;
-    CProofOfSpace pos;
+    CChiaProofOfSpace pos;
     std::vector<unsigned char> vchPubKey;
     std::vector<unsigned char> vchSignature;
 

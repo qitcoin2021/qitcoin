@@ -22,6 +22,7 @@ public:
     uint32_t n;
 
     static constexpr uint32_t NULL_INDEX = std::numeric_limits<uint32_t>::max();
+    static constexpr uint32_t STAKING_WITHDRAW_COIN_INDEX = NULL_INDEX - 1;
 
     COutPoint(): n(NULL_INDEX) { }
     COutPoint(const uint256& hashIn, uint32_t nIn): hash(hashIn), n(nIn) { }

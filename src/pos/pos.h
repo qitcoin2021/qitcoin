@@ -6,6 +6,7 @@
 #define BITCOIN_POS_POS_H
 
 #include <pos/bls.h>
+#include <primitives/transaction.h>
 #include <uint256.h>
 
 #include <string>
@@ -13,7 +14,7 @@
 
 class CBlockHeader;
 class CBlockIndex;
-class CProofOfSpace;
+class CChiaProofOfSpace;
 
 namespace Consensus { struct Params; }
 
@@ -97,6 +98,18 @@ VerifyResult VerifyBlockHeader(const CBlockIndex& prevBlockIndex, const CBlockHe
  * @return Return true when success
  */
 VerifyResult VerifyAndUpdateBlockHeader(CBlockHeader& block, const CBlockIndex& prevBlockIndex, const Consensus::Params& params);
+
+/**
+ * Generate staking pool nonces for epoch
+ *
+ * @param epochHash         Epoch hash
+ * @param nTargetHeight     Block height
+ * @param poolID            Staking pool ID
+ * @param votePower         Vote power
+ * 
+ * @return Return best nonce and deadline
+ */
+std::pair<uint64_t, uint64_t> GenerateStakingPoolNonces(const uint256 &epochHash, uint32_t nTargetHeight, const CAccountID &poolID, uint64_t votePower);
 
 }
 

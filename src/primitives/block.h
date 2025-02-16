@@ -13,7 +13,7 @@
 
 /** For Chia PoS.
  */
-class CProofOfSpace
+class CChiaProofOfSpace
 {
 public:
     std::vector<unsigned char> vchFarmerPubKey; // fpk[48]
@@ -25,7 +25,7 @@ public:
     std::vector<unsigned char> vchSignature; // fk.sign(make(genSign,iterations), plot_pk)[96]
     int32_t nScanIterations;
 
-    CProofOfSpace()
+    CChiaProofOfSpace()
     {
         SetNull();
     }
@@ -98,8 +98,8 @@ public:
     uint64_t nNonce;     //! nonce or iterations
     uint64_t nPlotterId; //! plotter or farmer
 
-    // pos
-    CProofOfSpace pos;
+    // Chia PoS
+    CChiaProofOfSpace pos;
 
     // block signature by generator
     std::vector<unsigned char> vchPubKey;
@@ -130,7 +130,7 @@ public:
         // remove flags
         nBaseTarget = nFlags & 0x0000ffffffffffffL;
 
-        // PoS support
+        // Chia PoS support
         if (nFlags & 0x4000000000000000L) {
             READWRITE(pos);
         }
