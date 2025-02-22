@@ -507,6 +507,15 @@ bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) {
         }
     }
 
+    // first commit the last batch
+    if (batch.SizeEstimate() > 0) {
+        db.WriteBatch(batch);
+        batch.Clear();
+    }
+
+    // Try write staking pool status
+    TrySnapshotStakingPoolStatus(LookupBlockIndex(hashBlock), Params().GetConsensus());
+
     // In the last batch, mark the database as consistent with hashBlock again.
     batch.Erase(DB_HEAD_BLOCKS);
     batch.Write(DB_BEST_BLOCK, hashBlock);
@@ -514,9 +523,6 @@ bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) {
     LogPrint(BCLog::COINDB, "Writing final batch of %.2f MiB\n", batch.SizeEstimate() * (1.0 / 1048576.0));
     bool ret = db.WriteBatch(batch);
     LogPrint(BCLog::COINDB, "Committed %u changed transaction outputs (out of %u) to coin database...\n", (unsigned int)changed, (unsigned int)count);
-
-    // Try write staking pool status
-    TrySnapshotStakingPoolStatus(LookupBlockIndex(hashBlock), Params().GetConsensus());
 
     return ret;
 }
