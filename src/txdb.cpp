@@ -7,6 +7,7 @@
 
 #include <chainparams.h>
 #include <hash.h>
+#include <key_io.h>
 #include <random.h>
 #include <shutdown.h>
 #include <ui_interface.h>
@@ -506,9 +507,6 @@ bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) {
         }
     }
 
-    // Try write staking pool status
-    TrySnapshotStakingPoolStatus(LookupBlockIndex(hashBlock), Params().GetConsensus());
-
     // In the last batch, mark the database as consistent with hashBlock again.
     batch.Erase(DB_HEAD_BLOCKS);
     batch.Write(DB_BEST_BLOCK, hashBlock);
@@ -516,6 +514,10 @@ bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) {
     LogPrint(BCLog::COINDB, "Writing final batch of %.2f MiB\n", batch.SizeEstimate() * (1.0 / 1048576.0));
     bool ret = db.WriteBatch(batch);
     LogPrint(BCLog::COINDB, "Committed %u changed transaction outputs (out of %u) to coin database...\n", (unsigned int)changed, (unsigned int)count);
+
+    // Try write staking pool status
+    TrySnapshotStakingPoolStatus(LookupBlockIndex(hashBlock), Params().GetConsensus());
+
     return ret;
 }
 
@@ -958,8 +960,8 @@ CAccountBalanceList CCoinsViewDB::GetTopStakingAccounts(int n, const CCoinsMap &
 }
 
 void CCoinsViewDB::TrySnapshotStakingPoolStatus(const CBlockIndex *pEpochInitIndex, const Consensus::Params &consensusParams) {
-    if (pEpochInitIndex->nHeight - consensusParams.nSaturnEpockBlocks * 2 < consensusParams.nSaturnActiveHeight ||
-        pEpochInitIndex->nHeight%consensusParams.nSaturnEpockBlocks != 0) {
+    if (pEpochInitIndex->nHeight%consensusParams.nSaturnEpockBlocks != 0 ||
+        pEpochInitIndex->nHeight + consensusParams.nSaturnEpockBlocks * 2 < consensusParams.nSaturnActiveHeight) {
         return;
     }
 
@@ -995,7 +997,7 @@ void CCoinsViewDB::TrySnapshotStakingPoolStatus(const CBlockIndex *pEpochInitInd
                     throw std::runtime_error("Database read invalid staking coin");
 
                 const auto payload = StakingPayload::As(coin.payload);
-                LogPrint(BCLog::COINDB, "  New staking coin: from=%s to=%s amount=%d\n", coin.outAccountID.ToString(), payload->GetReceiverID().ToString(), payload->GetAmount() / COIN);
+                LogPrint(BCLog::COINDB, "  New staking coin: from=%s to=%s amount=%d\n", coin.outAccountID.ToString(), EncodeDestination(ExtractDestination(payload->GetReceiverID())), payload->GetAmount() / COIN);
                 if (coin.outAccountID == consensusParams.SaturnStakingGenesisID) {
                     // initial pool
                     if (coin.out.nValue < GetInitialStakingPoolAmount((int) coin.nHeight, consensusParams)) {
@@ -1033,10 +1035,14 @@ void CCoinsViewDB::TrySnapshotStakingPoolStatus(const CBlockIndex *pEpochInitInd
 
         const CBlockIndex *pPrevEpochInitIndex = pEpochInitIndex; // pEpochInitIndex is previous epoch end block
         for (int i = 0; i < consensusParams.nSaturnEpockBlocks; i++) {
+            CAmount nAmount = GetBlockStakingPoolSubsidy(pPrevEpochInitIndex->nHeight, consensusParams);
             CAccountID poolID = ExtractAccountID(pPrevEpochInitIndex->minerRewardTxOut.scriptPubKey);
-            prevEpochPoolStatus[poolID].rewardAmount += GetBlockStakingPoolSubsidy(pPrevEpochInitIndex->nHeight, consensusParams);
+            LogPrint(BCLog::COINDB, "  PreEpoch=%d pool=%s amount=%d\n", pPrevEpochInitIndex->nHeight, EncodeDestination(ExtractDestination(poolID)), nAmount);
+
+            prevEpochPoolStatus[poolID].rewardAmount += nAmount;
             pPrevEpochInitIndex = pPrevEpochInitIndex->pprev;
         }
+        assert(pPrevEpochInitIndex->nHeight % consensusParams.nSaturnEpockBlocks == 0);
         const uint256 prevEpochHash = pPrevEpochInitIndex->GetBlockHash();
 
         CStakingPoolList prevEpochPools;
@@ -1092,21 +1098,21 @@ void CCoinsViewDB::TrySnapshotStakingPoolStatus(const CBlockIndex *pEpochInitInd
     size_t userCount = 0;
     CStakingPoolList pools;
     pools.reserve(epochPoolUsers.size());
-    for (auto itPool = epochPoolUsers.begin(); itPool != epochPoolUsers.end(); itPool++) {
+    for (auto itPool = enabledPools.cbegin(); itPool != enabledPools.cend(); itPool++) {
         const CAccountID &poolID = itPool->first;
-        CUserStatusMap &poolUsers = itPool->second;
+        const CUserStatusMap &poolUsers = epochPoolUsers[poolID];
 
         CAmount totalPoolStakeAmount = 0;
 
         // pool users
         CStakingPoolUserList users;
-        for (auto itPoolUser = poolUsers.begin(); itPoolUser != poolUsers.end(); itPoolUser++) {
+        for (auto itPoolUser = poolUsers.cbegin(); itPoolUser != poolUsers.cend(); itPoolUser++) {
             const CAccountID &userID = itPoolUser->first;
-            CUserStatus &userStatus = itPoolUser->second;
+            const CUserStatus &userStatus = itPoolUser->second;
             users.push_back(StakingPoolUser(userID, userStatus.stakeAmount, userStatus.withdrawableAmount));
             if (userStatus.withdrawableAmount >= PROTOCOL_SATURN_STAKING_MIN_WITHDRAWABLE_AMOUNT) {
                 COutPoint outpoint = CreateStakePendingCoinOutPoint(epochHash, poolID, userID);
-                CTxOut txOut(userStatus.withdrawableAmount, GetScriptForAccountID(userID), CScript(epochHash.begin(), epochHash.end()));
+                CTxOut txOut(userStatus.withdrawableAmount, GetScriptForAccountID(userID), CreateStakePendingCoinPayload(epochHash));
                 batch.Write(CoinEntry(&outpoint), Coin(txOut, pEpochInitIndex->nHeight, false));
                 if (batch.SizeEstimate() > batch_size) {
                     LogPrint(BCLog::COINDB, "Writing staking pool partial batch of %.2f MiB\n", batch.SizeEstimate() * (1.0 / 1048576.0));
@@ -1130,8 +1136,8 @@ void CCoinsViewDB::TrySnapshotStakingPoolStatus(const CBlockIndex *pEpochInitInd
         }
         userCount += users.size();
 
-        pools.push_back(StakingPool(poolID, enabledPools[poolID], totalPoolStakeAmount));
-        LogPrint(BCLog::COINDB, "  New Staking pool %s: amount=%d users=%u\n", poolID.ToString(), totalPoolStakeAmount / COIN, (unsigned int)users.size());
+        pools.push_back(StakingPool(poolID, itPool->second, totalPoolStakeAmount));
+        LogPrint(BCLog::COINDB, "  New Staking pool %s: amount=%d users=%u\n", EncodeDestination(ExtractDestination(poolID)), totalPoolStakeAmount / COIN, (unsigned int)users.size());
     }
     std::sort(pools.begin(), pools.end(),
         [](const StakingPool &a, const StakingPool &b) {

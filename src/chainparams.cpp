@@ -102,6 +102,7 @@ public:
         consensus.nSaturnActiveHeight = 654201;
         consensus.SaturnStakingGenesisID = uint160({ 0x0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }) ;// P2SH: 31h1vYVSYuKP6AhS86fbRdMw9XHkLXj3Lv 05 000000000000000000000000000000000000000f cb97a6db
         consensus.nSaturnEpockBlocks = 100;
+        assert(consensus.nSaturnActiveHeight % consensus.nSaturnEpockBlocks == 1);
 
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 28;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
@@ -140,9 +141,6 @@ public:
         // This is fine at runtime as we'll fall back to using them as a oneshot if they don't support the
         // service bits we want, but we should get them updated to support all service bits wanted by any
         // release ASAP to avoid it where possible.
-        vSeeds.push_back("seed1.qitchain.org");
-        vSeeds.push_back("seed2.qitchain.org");
-        vSeeds.push_back("seed3.qitchain.org");
         vSeeds.push_back("seed.qitchain.link");
         vSeeds.push_back("seed.qitchainnow.com");
 
@@ -181,15 +179,15 @@ public:
                 {  140000, uint256S("0x7f3ff615829ee7172c3be6ff9cc33a76e920e85c708b0292e8e2fde2b77c8221") },
                 {  150000, uint256S("0x48ee96ffef3db8902ba1c8e08263b8c826aa6cd42749d2293bd6e85f1dbd62fb") },
                 {  160000, uint256S("0x70dd8449d638fb494b5a90ac55ed939a4bfd13106df677b60aabda4a7c73baf0") },
-                {  164000, uint256S("0x2f705a69731611093a44ef9e9a99179489e826630ca46e7916a8bb5bebb87395") },
+                {  170000, uint256S("0xf6963688821c1bed7d09214b987032b26640a9c4c7cf7de484f3f8cb977c7028") }, // fork
             }
         };
 
         chainTxData = ChainTxData{
-            // Data from RPC: getchaintxstats 4096 2f705a69731611093a44ef9e9a99179489e826630ca46e7916a8bb5bebb87395
-            /* nTime    */ 1651969427,
-            /* nTxCount */ 218949,
-            /* dTxRate  */ 0.0093,
+            // Data from RPC: getchaintxstats 4096 f6ef703542456bb043ea41e5282d6c365f33a733d3acd5d01e9559be8b7c35dd
+            /* nTime    */ 1738372297,
+            /* nTxCount */ 847310,
+            /* dTxRate  */ 0.0059,
         };
     }
 };
@@ -235,6 +233,7 @@ public:
         consensus.nSaturnActiveHeight = 101;
         consensus.SaturnStakingGenesisID = uint160({ 0x0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }) ;// P2SH: 2MsFDzHRUAMpjHxKyoEHU3aMCMsVv4Bxd2N c4 000000000000000000000000000000000000000f 2c48c2b7
         consensus.nSaturnEpockBlocks = 100;
+        assert(consensus.nSaturnActiveHeight % consensus.nSaturnEpockBlocks == 1);
 
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 28;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
@@ -266,8 +265,8 @@ public:
         vFixedSeeds.clear();
         vSeeds.clear();
         // nodes with support for servicebits filtering should be at the top
-        vSeeds.push_back("testnet-seed1.qitchain.org");
-        vSeeds.push_back("testnet-seed2.qitchain.org");
+        vSeeds.push_back("testnet-seed.qitchain.link");
+        vSeeds.push_back("testnet-seed.qitchainnow.com");
 
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,111);
         base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,196);
@@ -321,7 +320,7 @@ public:
             "2MsRETb2aCZDJR2QB8FBjs948YnS1XX4pq4", // cNL8aYs9KJoHKZyYh5UoZZYN8nZbgJtT5D3e67gw3zHEeiRmbJqb
         };
         consensus.FundAddress = "2MsRETb2aCZDJR2QB8FBjs948YnS1XX4pq4";
-        consensus.nPowTargetSpacing = 180;
+        consensus.nPowTargetSpacing = 10;
         consensus.fPowNoRetargeting = true;
         consensus.nCapacityEvalWindow = 1680;
         consensus.nSubsidyHalvingInterval = 350000;
@@ -335,12 +334,13 @@ public:
         consensus.nPledgeFullRewardRatio = 800; // 80%
         consensus.nPledgeLowRewardRatio = 50; // 5%
 
-        consensus.nMercuryActiveHeight = 50;
+        consensus.nMercuryActiveHeight = 10;
         consensus.nMercuryPosFilterBits = 0;
 
-        consensus.nSaturnActiveHeight = 101;
-        consensus.SaturnStakingGenesisID = uint160({ 0x0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }) ;// P2SH: 2MsFDzHRUAMpjHxKyoEHU3aMCMsVv4Bxd2N c4 000000000000000000000000000000000000000f 2c48c2b7
+        consensus.nSaturnActiveHeight = 21;
+        consensus.SaturnStakingGenesisID = uint160({ 0x0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }) ;// P2SH: 2MtcY8AKER1NDC8Bco5y7c34DuEhQkqToXy c4 000000000000000000000000000000000000000f 2c48c2b7
         consensus.nSaturnEpockBlocks = 10;
+        assert(consensus.nSaturnActiveHeight % consensus.nSaturnEpockBlocks == 1);
 
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 28;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;

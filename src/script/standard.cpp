@@ -716,14 +716,22 @@ CAmount CalcStakePoolUserReward(CAmount poolReward, CAmount userStakeAmount, CAm
     return poolReward * userStakeAmount / poolStakeAmount;
 }
 
-COutPoint CreateStakePendingCoinOutPoint(const uint256 &epochHash, const CAccountID &poolID, const CAccountID &accountID)
+COutPoint CreateStakePendingCoinOutPoint(const uint256 &epochHash, const CAccountID &poolID, const CAccountID &userID)
 {
     uint256 result;
     CSHA256().Write(epochHash.begin(), uint256::WIDTH)
              .Write(poolID.begin(), CAccountID::WIDTH)
-             .Write(accountID.begin(), CAccountID::WIDTH)
+             .Write(userID.begin(), CAccountID::WIDTH)
              .Finalize((unsigned char*)&result);
     return COutPoint(result, COutPoint::STAKING_WITHDRAW_COIN_INDEX);
+}
+
+CScript CreateStakePendingCoinPayload(const uint256 &epochHash)
+{
+    CScript script;
+    script << OP_RETURN;
+    script << std::vector<unsigned char>(epochHash.begin(), epochHash.end());
+    return script;
 }
 
 CTxOutPayloadRef ExtractTxoutPayload(const CTxOut& txout, int nHeight, const std::set<TxOutType> &filters, bool for_test, std::map<std::string,std::string> *pinfo)

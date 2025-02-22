@@ -196,7 +196,7 @@ bool Consensus::CheckTxInputs(const CTransaction& tx, CValidationState& state, c
             }
         } else {
             // Check staking withdraw coin payload
-            if (prevout.n == COutPoint::STAKING_WITHDRAW_COIN_INDEX && coin.out.payload != CScript(epochHash.begin(), epochHash.end())) {
+            if (prevout.n == COutPoint::STAKING_WITHDRAW_COIN_INDEX && coin.out.payload != CreateStakePendingCoinPayload(epochHash)) {
                 return state.Invalid(ValidationInvalidReason::CONSENSUS, false, REJECT_INVALID, "bad-txns-staking-withdraw");
             }
         }

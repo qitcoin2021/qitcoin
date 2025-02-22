@@ -197,8 +197,7 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "listpoints", 0, "count" },
     { "listpoints", 1, "skip" },
     { "listpoints", 2, "include_watchonly" },
-    { "sendstakingtoaddress", 1, "amount" },
-    { "sendstakingtoaddress", 2, "lock_blocks" },
+    { "sendstakingtoaddress", 2, "amount" },
     { "sendstakingtoaddress", 5, "subtractfeefromamount" },
     { "sendstakingtoaddress", 6, "replaceable" },
     { "sendstakingtoaddress", 7, "conf_target" },
@@ -210,6 +209,7 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "getplottermininginfo", 1, "verbose" },
     { "getchaintips", 0, "verbose" },
     { "getstakingepoch", 0, "hash_or_height" },
+    { "createinitialstakingpooltx", 1, "commit_transaction" },
 
     /* Qitcoin & Burst mining compatible */
     { "submitNonce", 2, "height" },

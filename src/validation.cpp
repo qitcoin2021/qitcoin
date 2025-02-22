@@ -1347,7 +1347,7 @@ std::vector<CTxOut> GetBlockReward(const CBlockIndex* pindexPrev, const CAmount&
 
 CAmount GetInitialStakingPoolAmount(int nHeight, const Consensus::Params& consensusParams)
 {
-    const CAmount maxInitialAmount = 10000 * COIN;
+    const CAmount maxInitialAmount = 20000 * COIN;
     const CAmount minInitialAmount = maxInitialAmount / 10;
 
     if (nHeight == 1) {

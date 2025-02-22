@@ -57,13 +57,12 @@ Result CreatePointTransaction(CWallet* wallet,
 
 //! Create staking transaction.
 Result CreateStakingTransaction(CWallet* wallet,
-                                const CTxDestination &senderDest,
-                                const CTxDestination &receiverDest,
-                                CAmount nAmount,
-                                int nLockBlocks,
+                                const CTxDestination &poolDest,
+                                const CTxDestination &ownerDest,
                                 bool fSubtractFeeFromAmount,
                                 const CCoinControl& coin_control,
                                 std::vector<std::string>& errors,
+                                CAmount &nAmount,
                                 CAmount& txfee,
                                 CMutableTransaction& mtx);
 
@@ -74,6 +73,14 @@ Result CreateUnfreezeTransaction(CWallet* wallet,
                                  std::vector<std::string>& errors,
                                  CAmount& txfee,
                                  CMutableTransaction& mtx);
+
+//! Create witdhraw pending transaction.
+Result CreateWithdrawPendingTransaction(CWallet* wallet,
+                                        const COutPoint& outpoint,
+                                        const CCoinControl& coin_control,
+                                        std::vector<std::string>& errors,
+                                        CAmount& txfee,
+                                        CMutableTransaction& mtx);
 
 //! Sign the new transaction,
 //! @return false if the tx couldn't be found or if it was

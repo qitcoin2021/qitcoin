@@ -212,12 +212,13 @@ void GenearetePoolsDeadlineThread()
         if (pindexTip->nHeight + 1 < params.nSaturnActiveHeight || pindexTip->GetBlockHash() == preProcessBlockHash)
             continue;
         const uint256 epochHash = GetEpochHash(pindexTip, params);
+        bool fSubmittedNewNonce = false;
         for (const auto &pool : ::ChainstateActive().CoinsTip().GetStakingPools(epochHash)) {
             CTxDestination poolDest = ExtractDestination(pool.poolID);
             auto itPrivateKey = mapSignaturePrivKeys.find(boost::get<ScriptHash>(&poolDest)->GetUint64(0));
             if (itPrivateKey == mapSignaturePrivKeys.end())
                 continue;
-            
+
             auto result = pos::GenerateStakingPoolNonces(epochHash, pindexTip->nHeight + 1, pool.poolID, (uint64_t)(pool.stakeAmount / COIN));
             GeneratorState &generatorState = mapGenerators[pindexTip->GetNextGenerationSignature().GetUint64(0)];
             generatorState.SetNull();
@@ -228,10 +229,16 @@ void GenearetePoolsDeadlineThread()
             generatorState.privKey   = itPrivateKey->second;
             generatorState.plotterId = pool.poolID.GetUint64(0);
 
-            LogPrint(BCLog::POC, "%s %d: New pool %s deadline %" PRIu64 ".\n", epochHash.ToString(), pindexTip->nHeight + 1,
+            LogPrintf("%s %d: New pool %s deadline %" PRIu64 ".\n", epochHash.ToString(), pindexTip->nHeight + 1,
                 EncodeDestination(poolDest), generatorState.best / pindexTip->nBaseTarget);
+
+            if (params.fAllowMinDifficultyBlocks) {
+                generatorState.best  = static_cast<uint64_t>(params.nPowTargetSpacing) * pindexTip->nBaseTarget;
+            }
+
+            fSubmittedNewNonce = true;
         }
-        if (params.fAllowMinDifficultyBlocks) {
+        if (!fSubmittedNewNonce && params.fAllowMinDifficultyBlocks) {
             // for Regtest
             auto itPrivateKey = mapSignaturePrivKeys.cbegin();
             CScript scriptPubKey = GetScriptForPubKey(itPrivateKey->second->GetPubKey());
@@ -247,7 +254,7 @@ void GenearetePoolsDeadlineThread()
             generatorState.privKey   = itPrivateKey->second;
             generatorState.plotterId = poolID.GetUint64(0);
 
-            LogPrint(BCLog::POC, "%s %d: New test pool %s deadline %" PRIu64 ".\n", epochHash.ToString(), pindexTip->nHeight + 1,
+            LogPrintf("%s %d: New Regtest pool %s deadline %" PRIu64 ".\n", epochHash.ToString(), pindexTip->nHeight + 1,
                 EncodeDestination(poolDest), generatorState.best / pindexTip->nBaseTarget);
         }
 
@@ -390,8 +397,8 @@ uint64_t CalculateBaseTarget(const CBlockIndex& prevBlockIndex, const CBlockHead
 
     // intercept for PoS block
     if (nHeight >= params.nSaturnActiveHeight - 1 && nHeight < params.nSaturnActiveHeight + N) {
-        // initial PoS base target: about 200k coins
-        return INITIAL_BASE_TARGET / 10 * params.nPowTargetSpacing;
+        // initial PoS base target: about 20k coins
+        return INITIAL_BASE_TARGET * params.nPowTargetSpacing;
     }
 
     if (nHeight <= 1 + N) {
@@ -819,6 +826,7 @@ void StopPOC()
         threadGenearetePoolsDeadline.join();
 
     mapSignaturePrivKeys.clear();
+    mapGenerators.clear();
 
     LogPrintf("Stopped PoC module\n");
 }

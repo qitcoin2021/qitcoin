@@ -152,6 +152,21 @@ class LockImpl : public Chain::Lock, public UniqueLock<CCriticalSection>
         LockAssertion lock(::cs_main);
         return CheckFinalTx(tx);
     }
+    uint256 getCurrentEpochHash() override
+    {
+        LockAssertion lock(::cs_main);
+        return ::GetEpochHash(::ChainActive().Tip(), Params().GetConsensus());
+    }
+    CStakingPoolList getStakingPools(const uint256& epochHash) override
+    {
+        LockAssertion lock(::cs_main);
+        return ::ChainstateActive().CoinsTip().GetStakingPools(epochHash);
+    }
+    CStakingPoolUserList getStakingPoolUsers(const uint256 &epochHash, const CAccountID &poolID) override
+    {
+        LockAssertion lock(::cs_main);
+        return ::ChainstateActive().CoinsTip().GetStakingPoolUsers(epochHash, poolID);
+    }
 
     using UniqueLock::UniqueLock;
 };

@@ -138,6 +138,15 @@ public:
 
         //! Check if transaction will be final given chain height current time.
         virtual bool checkFinalTx(const CTransaction& tx) = 0;
+
+        //! Get current epoch hash.
+        virtual uint256 getCurrentEpochHash() = 0;
+
+        //! Get epoch staking pools.
+        virtual CStakingPoolList getStakingPools(const uint256& epochHash) = 0;
+
+        //! Get epoch staking pool users.
+        virtual CStakingPoolUserList getStakingPoolUsers(const uint256 &epochHash, const CAccountID &poolID) = 0;
     };
 
     //! Return Lock interface. Chain is locked when this is called, and

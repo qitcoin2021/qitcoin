@@ -414,7 +414,9 @@ static const int PROTOCOL_SATURN_STAKING_NODES_MAX = 10000;
 
 CAmount CalcStakePoolUserReward(CAmount poolReward, CAmount userStakeAmount, CAmount poolStakeAmount);
 
-COutPoint CreateStakePendingCoinOutPoint(const uint256 &epochHash, const CAccountID &poolID, const CAccountID &accountID);
+COutPoint CreateStakePendingCoinOutPoint(const uint256 &epochHash, const CAccountID &poolID, const CAccountID &userID);
+
+CScript CreateStakePendingCoinPayload(const uint256 &epochHash);
 
 /** Parse transaction output payload. */
 CTxOutPayloadRef ExtractTxoutPayload(const CTxOut& txout, int nHeight = 0, const std::set<TxOutType>& filters = {}, bool for_test = false, std::map<std::string,std::string> *pinfo = nullptr);

@@ -421,4 +421,72 @@ template <typename Tx> static inline CTransactionRef MakeTransactionRef(Tx&& txI
 /** Account ID (CScriptID). */
 typedef uint160 CAccountID;
 
+/** List of <Account, Amount> */
+typedef std::pair<CAccountID, CAmount> CAccountBalance;
+typedef std::vector<CAccountBalance> CAccountBalanceList;
+
+/** Staking pool <Account, Amount> */
+class StakingPool
+{
+public:
+    CAccountID poolID;
+    COutPoint poolPos;
+    CAmount stakeAmount;
+
+    StakingPool() {
+        poolID.SetNull();
+        poolPos.SetNull();
+        stakeAmount = 0;
+    }
+
+    StakingPool(const CAccountID &poolIDIn, const COutPoint &poolPosIn, CAmount stakeAmountIn) {
+        poolID = poolIDIn;
+        poolPos = poolPosIn;
+        stakeAmount = stakeAmountIn;
+    }
+
+    ADD_SERIALIZE_METHODS;
+
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action) {
+        READWRITE(poolID);
+        READWRITE(poolPos);
+        READWRITE(stakeAmount);
+    }
+};
+/** List of Staking pools <Account, Amount> */
+typedef std::vector<StakingPool> CStakingPoolList;
+
+/** Staking pool user <Account, Amount, Amount> */
+class StakingPoolUser
+{
+public:
+    CAccountID accountID;
+    CAmount stakeAmount;
+    CAmount withdrawableAmount;
+
+    StakingPoolUser() {
+        accountID.SetNull();
+        stakeAmount = 0;
+        withdrawableAmount = 0;
+    }
+
+    StakingPoolUser(const CAccountID &accountIDIn, CAmount stakeAmountIn, CAmount withdrawableAmountIn) {
+        accountID = accountIDIn;
+        stakeAmount = stakeAmountIn;
+        withdrawableAmount = withdrawableAmountIn;
+    }
+
+    ADD_SERIALIZE_METHODS;
+
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action) {
+        READWRITE(accountID);
+        READWRITE(stakeAmount);
+        READWRITE(withdrawableAmount);
+    }
+};
+/** List of Staking pool users <Account, Amount, Amount> */
+typedef std::vector<StakingPoolUser> CStakingPoolUserList;
+
 #endif // BITCOIN_PRIMITIVES_TRANSACTION_H

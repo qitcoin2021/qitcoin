@@ -4459,7 +4459,7 @@ static UniValue bindplotter(const JSONRPCRequest& request)
 
     // Sign transaction
     if (!uniformer::SignTransaction(pwallet, mtx)) {
-        throw JSONRPCError(RPC_WALLET_ERROR, strprintf("Sign transaction error(%d): %s", (uint32_t)result, errors.empty() ? "Unknown" : errors[0]));
+        throw JSONRPCError(RPC_WALLET_ERROR, "Sign transaction error");
     }
     uint256 bindplotterTxid = mtx.GetHash();
 
@@ -4551,7 +4551,7 @@ static UniValue unbindplotter(const JSONRPCRequest& request)
 
     // Sign transaction
     if (!uniformer::SignTransaction(pwallet, mtx)) {
-        throw JSONRPCError(RPC_WALLET_ERROR, strprintf("Sign transaction error(%d): %s", (uint32_t)result, errors.empty() ? "Unknown" : errors[0]));
+        throw JSONRPCError(RPC_WALLET_ERROR, "Sign transaction error");
     }
     uint256 unbindTxid = mtx.GetHash();
 
@@ -4792,7 +4792,7 @@ static UniValue sendpointtoaddress(const JSONRPCRequest& request)
 
     // Sign transaction
     if (!uniformer::SignTransaction(pwallet, mtx)) {
-        throw JSONRPCError(RPC_WALLET_ERROR, strprintf("Sign transaction error(%d): %s", (uint32_t)result, errors.empty() ? "Unknown" : errors[0]));
+        throw JSONRPCError(RPC_WALLET_ERROR, "Sign transaction error");
     }
     uint256 pointTxid = mtx.GetHash();
 
@@ -4887,7 +4887,7 @@ static UniValue withdrawpoint(const JSONRPCRequest& request)
 
     // Sign transaction
     if (!uniformer::SignTransaction(pwallet, mtx)) {
-        throw JSONRPCError(RPC_WALLET_ERROR, strprintf("Sign transaction error(%d): %s", (uint32_t)result, errors.empty() ? "Unknown" : errors[0]));
+        throw JSONRPCError(RPC_WALLET_ERROR, "Sign transaction error");
     }
     uint256 withdrawTxid = mtx.GetHash();
 
@@ -5057,9 +5057,9 @@ static UniValue sendstakingtoaddress(const JSONRPCRequest& request)
                 "\nSend an amount for staking to a given address from wallet." +
                     HelpRequiringPassphrase(pwallet) + "\n",
                 {
-                    {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "The Qitcoin address to send to."},
+                    {"pool_address", RPCArg::Type::STR, RPCArg::Optional::NO, "The Qitcoin address to send to pool."},
+                    {"owner_address", RPCArg::Type::STR, RPCArg::Optional::OMITTED_NAMED_ARG, "The Qitcoin address for staking owner."},
                     {"amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "The amount in " + CURRENCY_UNIT + " to send. eg 0.1"},
-                    {"lock_blocks", RPCArg::Type::NUM, RPCArg::Optional::NO, "The lock blocks. Only support 172800,259200."},
                     {"comment", RPCArg::Type::STR, RPCArg::Optional::OMITTED_NAMED_ARG, "A comment used to store what the transaction is for.\n"
             "                             This is not part of the transaction, just kept in your wallet."},
                     {"comment_to", RPCArg::Type::STR, RPCArg::Optional::OMITTED_NAMED_ARG, "A comment to store the name of the person or organization\n"
@@ -5078,10 +5078,10 @@ static UniValue sendstakingtoaddress(const JSONRPCRequest& request)
             "\"txid\"                  (string) The transaction id.\n"
                 },
                 RPCExamples{
-                    HelpExampleCli("sendstakingtoaddress", "\"" + Params().GetConsensus().FundAddress + "\" 0.1")
-            + HelpExampleCli("sendstakingtoaddress", "\"" + Params().GetConsensus().FundAddress + "\" 0.1 \"donation\" \"seans outpost\"")
-            + HelpExampleCli("sendstakingtoaddress", "\"" + Params().GetConsensus().FundAddress + "\" 0.1 \"\" \"\" true")
-            + HelpExampleRpc("sendstakingtoaddress", "\"" + Params().GetConsensus().FundAddress + "\", 0.1, \"donation\", \"seans outpost\"")
+                    HelpExampleCli("sendstakingtoaddress", "\"" + Params().GetConsensus().FundAddress + "\",\"" + Params().GetConsensus().FundAddress + "\" 100")
+            + HelpExampleCli("sendstakingtoaddress", "\"" + Params().GetConsensus().FundAddress + "\",\"" + Params().GetConsensus().FundAddress + "\" 100 \"donation\" \"seans outpost\"")
+            + HelpExampleCli("sendstakingtoaddress", "\"" + Params().GetConsensus().FundAddress + "\",\"" + Params().GetConsensus().FundAddress + "\" 100 \"\" \"\" true")
+            + HelpExampleRpc("sendstakingtoaddress", "\"" + Params().GetConsensus().FundAddress + "\",\"" + Params().GetConsensus().FundAddress + "\" 100, \"donation\", \"seans outpost\"")
                 },
             }.ToString());
 
@@ -5089,22 +5089,27 @@ static UniValue sendstakingtoaddress(const JSONRPCRequest& request)
     // the user could have gotten from another RPC command prior to now
     pwallet->BlockUntilSyncedToCurrentChain();
 
-    // Receiver
-    CTxDestination pointReceiverDest = DecodeDestination(request.params[0].get_str());
-    if (!IsValidDestination(pointReceiverDest))
-        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid address");
+    // Pool
+    CTxDestination poolDest = DecodeDestination(request.params[0].get_str());
+    if (!IsValidDestination(poolDest))
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid pool address");
+
+    // Owner
+    CTxDestination ownerDest;
+    if (request.params[1].isNull() || request.params[1].get_str().empty()) {
+        ownerDest = pwallet->GetPrimaryDestination();
+    } else {
+        ownerDest = DecodeDestination(request.params[1].get_str());
+    }
+    if (!IsValidDestination(ownerDest))
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid owner address");
 
     // Amount
-    CAmount nAmount = AmountFromValue(request.params[1]);
+    CAmount nAmount = AmountFromValue(request.params[2]);
     if (nAmount <= 0)
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid amount for send");
     else if (nAmount < PROTOCOL_STAKING_AMOUNT_MIN)
         throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Small amount for staking, require more than %s QTC", FormatMoney(PROTOCOL_STAKING_AMOUNT_MIN)));
-
-    // Lock blocks
-    int nLockBlocks = request.params[2].get_int();
-    if (nLockBlocks <= 0 || GetStakingAmount(nAmount, nLockBlocks) == 0)
-        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid lock blocks");
 
     // Wallet comments
     mapValue_t mapValue;
@@ -5134,20 +5139,19 @@ static UniValue sendstakingtoaddress(const JSONRPCRequest& request)
     }
 
     std::vector<std::string> errors;
-    CAmount txfee;
+    CAmount txfee = 0;
     CMutableTransaction mtx;
     uniformer::Result result;
 
     // Create transaction
-    CTxDestination pointSenderDest = pwallet->GetPrimaryDestination();
-    result = uniformer::CreateStakingTransaction(pwallet, pointSenderDest, pointReceiverDest, nAmount, nLockBlocks, fSubtractFeeFromAmount, coin_control, errors, txfee, mtx);
+    result = uniformer::CreateStakingTransaction(pwallet, poolDest, ownerDest, fSubtractFeeFromAmount, coin_control, errors, nAmount, txfee, mtx);
     if (result != uniformer::Result::OK) {
         throw JSONRPCError(RPC_WALLET_ERROR, strprintf("Create transaction error(%d): %s", (uint32_t)result, errors.empty() ? "Unknown" : errors[0]));
     }
 
     // Sign transaction
     if (!uniformer::SignTransaction(pwallet, mtx)) {
-        throw JSONRPCError(RPC_WALLET_ERROR, strprintf("Sign transaction error(%d): %s", (uint32_t)result, errors.empty() ? "Unknown" : errors[0]));
+        throw JSONRPCError(RPC_WALLET_ERROR, "Sign transaction error");
     }
     uint256 pointTxid = mtx.GetHash();
 
@@ -5242,7 +5246,7 @@ static UniValue withdrawstaking(const JSONRPCRequest& request)
 
     // Sign transaction
     if (!uniformer::SignTransaction(pwallet, mtx)) {
-        throw JSONRPCError(RPC_WALLET_ERROR, strprintf("Sign transaction error(%d): %s", (uint32_t)result, errors.empty() ? "Unknown" : errors[0]));
+        throw JSONRPCError(RPC_WALLET_ERROR, "Sign transaction error");
     }
     uint256 withdrawTxid = mtx.GetHash();
 
@@ -5394,6 +5398,166 @@ static UniValue liststakings(const JSONRPCRequest& request)
     return ret;
 }
 
+static UniValue createinitialstakingpooltx(const JSONRPCRequest& request)
+{
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    CWallet* const pwallet = wallet.get();
+
+    if (!EnsureWalletIsAvailable(pwallet, request.fHelp)) {
+        return NullUniValue;
+    }
+
+    if (request.fHelp || request.params.size() < 1 || request.params.size() > 2)
+        throw std::runtime_error(
+            RPCHelpMan{"createinitialstakingpooltx",
+                "\nCreate a initial staking pool tx from wallet." +
+                    HelpRequiringPassphrase(pwallet) + "\n",
+                {
+                    {"pool_address", RPCArg::Type::STR, RPCArg::Optional::NO, "The Qitcoin address to owner to."},
+                    {"commit_transaction", RPCArg::Type::BOOL, /* default */ "false", "The transaction will commit to network.\n"},
+                },
+                RPCResult{
+            "\"txid\": \"\"            (string) The transaction id.\n"
+            "\"amount\": x.xxx,      (numeric) The required amount in " + CURRENCY_UNIT + ".\n"
+            "\"raw\": \"\"             (string) The raw transaction hex.\n"
+                },
+                RPCExamples{
+                    HelpExampleCli("createinitialstakingpooltx", "\"" + Params().GetConsensus().FundAddress + "\"")
+                },
+            }.ToString());
+
+    // Make sure the results are valid at least up to the most recent block
+    // the user could have gotten from another RPC command prior to now
+    pwallet->BlockUntilSyncedToCurrentChain();
+
+    // Owner
+    CTxDestination poolOwnerDest = DecodeDestination(request.params[0].get_str());
+    if (!IsValidDestination(poolOwnerDest))
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid pool address");
+
+    // Commit transaction
+    bool fCommitTransaction = false;
+    if (!request.params[1].isNull()) {
+        fCommitTransaction = request.params[1].get_bool();
+    }
+
+    std::vector<std::string> errors;
+    CAmount nInitialStakingPoolAmount = 0;
+    CAmount txfee = 0;
+    CMutableTransaction mtx;
+    uniformer::Result result;
+
+    // Create transaction
+    CCoinControl coin_control;
+    result = uniformer::CreateStakingTransaction(pwallet, CNoDestination(), poolOwnerDest, false, coin_control, errors, nInitialStakingPoolAmount, txfee, mtx);
+    if (result != uniformer::Result::OK) {
+        throw JSONRPCError(RPC_WALLET_ERROR, strprintf("Create transaction error(%d): %s", (uint32_t)result, errors.empty() ? "Unknown" : errors[0]));
+    }
+
+    // Sign transaction
+    if (!uniformer::SignTransaction(pwallet, mtx)) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Sign transaction error");
+    }
+
+    UniValue ret(UniValue::VOBJ);
+    ret.pushKV("txid", mtx.GetHash().GetHex());
+    ret.pushKV("amount", ValueFromAmount(nInitialStakingPoolAmount));
+    ret.pushKV("fee", ValueFromAmount(txfee));
+    ret.pushKV("raw", EncodeHexTx(CTransaction(mtx)));
+
+    // Commit transaction
+    if (fCommitTransaction) {
+        CTransactionRef tx(MakeTransactionRef(std::move(mtx)));
+        std::string err_string;
+        AssertLockNotHeld(cs_main);
+        const TransactionError err = BroadcastTransaction(tx, err_string, COIN / 10, true, true);
+        if (TransactionError::OK != err) {
+            ret.pushKV("commit_result", err_string);
+        } else {
+            ret.pushKV("commit_result", "success");
+        }
+    }
+
+    return ret;
+}
+
+static UniValue withdrawpending(const JSONRPCRequest& request)
+{
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    CWallet* const pwallet = wallet.get();
+
+    if (!EnsureWalletIsAvailable(pwallet, request.fHelp)) {
+        return NullUniValue;
+    }
+
+    if (request.fHelp || request.params.size() != 2)
+        throw std::runtime_error(
+            RPCHelpMan{"withdrawpending",
+                "\nWithdraw an staking for a given staking pool_address and user_address." +
+                    HelpRequiringPassphrase(pwallet) + "\n",
+                {
+                    {"pool_address", RPCArg::Type::STR, RPCArg::Optional::NO, "The Qitcoin address to pool."},
+                    {"user_address", RPCArg::Type::STR, RPCArg::Optional::NO, "The Qitcoin address to user."},
+                },
+                RPCResult{
+            "\"txid\"                  (string) The transaction id.\n"
+                },
+                RPCExamples{
+                    HelpExampleCli("createinitialstakingpooltx", "\"" + Params().GetConsensus().FundAddress + "\",\"" + Params().GetConsensus().FundAddress + "\"")
+                },
+            }.ToString());
+
+    // Make sure the results are valid at least up to the most recent block
+    // the user could have gotten from another RPC command prior to now
+    pwallet->BlockUntilSyncedToCurrentChain();
+
+    // Pool address
+    const CAccountID poolID = ExtractAccountID(DecodeDestination(request.params[0].get_str()));
+    if (poolID.IsNull()) {
+        throw JSONRPCError(RPC_TYPE_ERROR, "Invalid pool address, must from Qitcoin wallet (P2SH address)");
+    }
+
+    // User address
+    const CAccountID userID = ExtractAccountID(DecodeDestination(request.params[1].get_str()));
+    if (userID.IsNull()) {
+        throw JSONRPCError(RPC_TYPE_ERROR, "Invalid user address, must from Qitcoin wallet (P2SH address)");
+    }
+
+    CMutableTransaction mtx;
+    {
+        auto locked_chain = pwallet->chain().lock();
+
+        // UTXO
+        const uint256 epochHash = GetEpochHash(::ChainActive().Tip(), Params().GetConsensus());
+        const COutPoint withdrawableEntry = CreateStakePendingCoinOutPoint(epochHash, poolID, userID);
+
+        std::vector<std::string> errors;
+        CAmount txfee;
+        uniformer::Result result;
+
+        // Create transaction
+        CCoinControl coin_control;
+        result = uniformer::CreateWithdrawPendingTransaction(pwallet, withdrawableEntry, coin_control, errors, txfee, mtx);
+        if (result != uniformer::Result::OK) {
+            throw JSONRPCError(RPC_WALLET_ERROR, strprintf("Create transaction error(%d): %s", (uint32_t)result, errors.empty() ? "Unknown" : errors[0]));
+        }
+    }
+
+    // Sign transaction
+    if (!uniformer::SignTransaction(pwallet, mtx)) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Sign transaction error");
+    }
+
+    // Commit transaction
+    CTransactionRef tx(MakeTransactionRef(std::move(mtx)));
+    std::string err_string;
+    AssertLockNotHeld(cs_main);
+    const TransactionError err = BroadcastTransaction(tx, err_string, COIN / 10, true, true);
+    if (TransactionError::OK != err) {
+        throw JSONRPCTransactionError(err, err_string);
+    }
+    return tx->GetHash().GetHex();
+}
 
 UniValue abortrescan(const JSONRPCRequest& request); // in rpcdump.cpp
 UniValue dumpprivkey(const JSONRPCRequest& request); // in rpcdump.cpp
@@ -5477,9 +5641,11 @@ static const CRPCCommand commands[] =
     { "wallet",             "sendpointtoaddress",               &sendpointtoaddress,            {"address","amount","lock_blocks","comment","comment_to","subtractfeefromamount","replaceable","conf_target","estimate_mode"} },
     { "wallet",             "withdrawpoint",                    &withdrawpoint,                 {"txid","comment","comment_to","replaceable","conf_target","estimate_mode"} },
     { "wallet",             "listpoints",                       &listpoints,                    {"count","skip","include_watchonly"} },
-    { "wallet",             "sendstakingtoaddress",             &sendstakingtoaddress,          {"address","amount","lock_blocks","comment","comment_to","subtractfeefromamount","replaceable","conf_target","estimate_mode"} },
+    { "wallet",             "sendstakingtoaddress",             &sendstakingtoaddress,          {"pool_address","owner_address","amount","comment","comment_to","subtractfeefromamount","replaceable","conf_target","estimate_mode"} },
     { "wallet",             "withdrawstaking",                  &withdrawstaking,               {"txid","comment","comment_to","replaceable","conf_target","estimate_mode"} },
     { "wallet",             "liststakings",                     &liststakings,                  {"count","skip","include_watchonly"} },
+    { "wallet",             "createinitialstakingpooltx",       &createinitialstakingpooltx,    {"pool_address", "commit_transaction"} },
+    { "wallet",             "withdrawpending",                  &withdrawpending,               {"pool_address","user_address"} },
 };
 // clang-format on
 

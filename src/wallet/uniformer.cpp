@@ -6,18 +6,20 @@
 
 #include <chainparams.h>
 #include <consensus/validation.h>
+#include <consensus/tx_verify.h>
 #include <interfaces/chain.h>
 #include <key_io.h>
 #include <wallet/coincontrol.h>
 #include <wallet/fees.h>
 #include <wallet/wallet.h>
 #include <txmempool.h>
-#include <consensus/tx_verify.h>
+#include <univalue.h>
 #include <util/moneystr.h>
 #include <util/rbf.h>
 #include <util/system.h>
 #include <util/translation.h>
 #include <util/validation.h>
+#include <validation.h>
 #include <net.h>
 
 //! Check whether transaction has descendant in wallet, or has been
@@ -170,14 +172,52 @@ Result CreatePointTransaction(CWallet* wallet, const CTxDestination &senderDest,
 }
 
 //! Create staking transaction.
-Result CreateStakingTransaction(CWallet* wallet, const CTxDestination &senderDest, const CTxDestination &receiverDest, CAmount nAmount, int nLockBlocks, bool fSubtractFeeFromAmount,
-                              const CCoinControl& coin_control, std::vector<std::string>& errors, CAmount& txfee, CMutableTransaction& mtx)
+Result CreateStakingTransaction(CWallet* wallet, const CTxDestination &poolDest, const CTxDestination &ownerDest,
+                                bool fSubtractFeeFromAmount, const CCoinControl& coin_control,
+                                std::vector<std::string>& errors, CAmount &nAmount, CAmount& txfee, CMutableTransaction& mtx)
 {
     auto locked_chain = wallet->chain().lock();
     LOCK(wallet->cs_wallet);
     errors.clear();
 
-    if (nAmount <= 0) {
+    CTxDestination realPoolDest, realOwnerDest;
+
+    // Initial or Send
+    if (!boost::get<CNoDestination>(&poolDest)) {
+        // Send
+        realPoolDest = poolDest;
+        realOwnerDest = ownerDest;
+
+        // Check existing staking pool
+        bool fPoolExist = false;
+        CAccountID poolID = ExtractAccountID(realPoolDest);
+        for (const StakingPool &pool : locked_chain->getStakingPools(locked_chain->getCurrentEpochHash())) {
+            if (pool.poolID == poolID) {
+                fPoolExist = true;
+                break;
+            }
+        }
+        if (!fPoolExist) {
+            errors.push_back("The staking pool not exist");
+            return Result::INVALID_PARAMETER;
+        }
+    } else {
+        // Initial
+        realPoolDest = ownerDest;
+        realOwnerDest = ExtractDestination(Params().GetConsensus().SaturnStakingGenesisID);
+        nAmount = GetInitialStakingPoolAmount(locked_chain->getHeight().get_value_or(-1), Params().GetConsensus());
+    
+        // Check existing staking pool
+        CAccountID poolID = ExtractAccountID(realPoolDest);
+        for (const StakingPool &pool : locked_chain->getStakingPools(locked_chain->getCurrentEpochHash())) {
+            if (pool.poolID == poolID) {
+                errors.push_back("The staking pool already exists");
+                return Result::INVALID_PARAMETER;
+            }
+        }
+    }
+
+    if (nAmount < 0) {
         errors.push_back("Invalid amount");
         return Result::INVALID_PARAMETER;
     } if (nAmount < PROTOCOL_STAKING_AMOUNT_MIN) {
@@ -185,16 +225,12 @@ Result CreateStakingTransaction(CWallet* wallet, const CTxDestination &senderDes
         return Result::INVALID_PARAMETER;
     }
 
-    // Create special coin control for point
-    CCoinControl realCoinControl = coin_control;
-    realCoinControl.destChange = senderDest;
-
-    // Create point transaction
+    // Create staking transaction
     std::string strError;
-    std::vector<CRecipient> vecSend = { {GetScriptForDestination(senderDest), nAmount, fSubtractFeeFromAmount, GetStakingScriptForDestination(receiverDest, nLockBlocks)} };
+    std::vector<CRecipient> vecSend = { {GetScriptForDestination(realOwnerDest), nAmount, fSubtractFeeFromAmount, GetStakingScriptForDestination(realPoolDest, PROTOCOL_POINT_LOCK_BLOCKS_FULL_AMOUNT)} };
     int nChangePosRet = 1;
     CTransactionRef tx;
-    if (!wallet->CreateTransaction(*locked_chain, vecSend, tx, txfee, nChangePosRet, strError, realCoinControl, false)) {
+    if (!wallet->CreateTransaction(*locked_chain, vecSend, tx, txfee, nChangePosRet, strError, coin_control, false)) {
         errors.push_back(strError);
         return Result::WALLET_ERROR;
     }
@@ -204,6 +240,7 @@ Result CreateStakingTransaction(CWallet* wallet, const CTxDestination &senderDes
     return Result::OK;
 }
 
+//! Create unfreeze transaction.
 Result CreateUnfreezeTransaction(CWallet* wallet, const COutPoint& outpoint,
                                  const CCoinControl& coin_control, std::vector<std::string>& errors, CAmount& txfee, CMutableTransaction& mtx)
 {
@@ -274,7 +311,7 @@ Result CreateUnfreezeTransaction(CWallet* wallet, const COutPoint& outpoint,
     txNew.vout = { CTxOut(coin.out.nValue, coin.out.scriptPubKey) };
     int64_t nBytes = CalculateMaximumSignedTxSize(CTransaction(txNew), wallet, coin_control.fAllowWatchOnly);
     if (nBytes < 0) {
-        errors.push_back(_("Signing transaction failed").translated);
+        errors.push_back(_("calc transaction size failed").translated);
         return Result::WALLET_ERROR;
     }
     txfee = GetMinimumFee(*wallet, nBytes, coin_control, nullptr);
@@ -283,6 +320,39 @@ Result CreateUnfreezeTransaction(CWallet* wallet, const COutPoint& outpoint,
     // Check
     if (txNew.vin.size() != 1 || txNew.vin[0].prevout != targetOutpoint || txNew.vout.size() != 1 || txNew.vout[0].scriptPubKey != coin.out.scriptPubKey) {
         errors.push_back("Error on create unfreeze transaction");
+        return Result::WALLET_ERROR;
+    }
+
+    // return
+    mtx = std::move(txNew);
+    return Result::OK;
+}
+
+//! Create witdhraw pending transaction.
+Result CreateWithdrawPendingTransaction(CWallet* wallet, const COutPoint& outpoint,
+                                        const CCoinControl& coin_control, std::vector<std::string>& errors, CAmount& txfee, CMutableTransaction& mtx)
+{
+    auto locked_chain = wallet->chain().lock();
+    LOCK(wallet->cs_wallet);
+
+    // Check UTXO
+    const Coin &coin = wallet->chain().accessCoin(outpoint);
+    if (coin.IsSpent()) {
+        errors.push_back(strprintf("Not found coin: %s", outpoint.ToString()));
+        return Result::INVALID_REQUEST;
+    }
+
+    // Create transaction
+    CMutableTransaction txNew;
+    txNew.nLockTime = locked_chain->getHeight().get_value_or(0);
+    txNew.vin = { CTxIn(outpoint, CScript(), CTxIn::SEQUENCE_FINAL - 1) };
+    txNew.vout = { CTxOut(coin.out.nValue, coin.out.scriptPubKey, coin.out.payload) };
+    txfee = GetMinimumFee(*wallet, 1000, coin_control, nullptr);
+    txNew.vout[0].nValue -= txfee;
+
+    // Check
+    if (txNew.vin.size() != 1 || txNew.vin[0].prevout != outpoint || txNew.vout.size() != 1 || txNew.vout[0].scriptPubKey != coin.out.scriptPubKey) {
+        errors.push_back("Error on create withdraw transaction");
         return Result::WALLET_ERROR;
     }
 

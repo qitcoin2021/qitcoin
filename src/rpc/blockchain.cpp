@@ -1115,8 +1115,8 @@ UniValue gettxout(const JSONRPCRequest& request)
     UniValue ret(UniValue::VOBJ);
 
     uint256 hash(ParseHashV(request.params[0], "txid"));
-    int n = request.params[1].get_int();
-    COutPoint out(hash, n);
+    int64_t n = request.params[1].get_int64();
+    COutPoint out(hash, (uint32_t) n);
     bool fMempool = true;
     if (!request.params[2].isNull())
         fMempool = request.params[2].get_bool();
@@ -2332,7 +2332,7 @@ static UniValue getstakingepoch(const JSONRPCRequest& request)
     RPCHelpMan{"getstakingepoch",
                 "\nget epoch information.\n",
                 {
-                    {"hash_or_height", RPCArg::Type::NUM, RPCArg::Optional::NO, "The block hash or height of the target block", "", {"", "string or numeric"}},
+                    {"hash_or_height", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "The block hash or height of the target block", "", {"", "string or numeric"}},
                 },
                 RPCResult{
                     "{\n"
@@ -2349,7 +2349,9 @@ static UniValue getstakingepoch(const JSONRPCRequest& request)
     auto& consensusParams = Params().GetConsensus();
 
     CBlockIndex* pindex;
-    if (request.params[0].isNum()) {
+    if (request.params[0].isNull()) {
+        pindex = ::ChainActive().Tip();
+    } else if (request.params[0].isNum()) {
         const int height = request.params[0].get_int();
         const int current_tip = ::ChainActive().Height();
         if (height < 0) {
@@ -2369,10 +2371,6 @@ static UniValue getstakingepoch(const JSONRPCRequest& request)
     }
 
     assert(pindex != nullptr);
-    if (pindex->nHeight < Params().GetConsensus().nSaturnActiveHeight) {
-        throw JSONRPCError(RPC_INTERNAL_ERROR, "Epoch init block not found");
-    }
-
     const CBlockIndex* pEpochInitIndex = GetEpochInitIndex(pindex, consensusParams);
     assert(pEpochInitIndex != nullptr);
 
@@ -2380,6 +2378,7 @@ static UniValue getstakingepoch(const JSONRPCRequest& request)
     ret.pushKV("epoch_hash", pEpochInitIndex->GetBlockHash().GetHex());
     ret.pushKV("from_height", pEpochInitIndex->nHeight + 1);
     ret.pushKV("to_height", pEpochInitIndex->nHeight + Params().GetConsensus().nSaturnEpockBlocks);
+    ret.pushKV("initial_staking_pool_amount", ValueFromAmount(GetInitialStakingPoolAmount(pindex->nHeight, consensusParams)));
     return ret;
 }
 
@@ -2388,7 +2387,7 @@ static UniValue getstakingpools(const JSONRPCRequest& request)
     RPCHelpMan{"getstakingpools",
                 "\nget staking pools.\n",
                 {
-                    {"epoch_hash", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The hash of the epoch"},
+                    {"epoch_hash", RPCArg::Type::STR_HEX, RPCArg::Optional::OMITTED, "The hash of the epoch"},
                 },
                 RPCResult{
                     "{\n"
@@ -2401,7 +2400,13 @@ static UniValue getstakingpools(const JSONRPCRequest& request)
 
     LOCK(cs_main);
 
-    uint256 epochHash(ParseHashV(request.params[0], "epoch_hash"));
+    // epoch hash
+    uint256 epochHash;
+    if (request.params[0].isNull() || (request.params[0].isStr() && request.params[0].get_str().empty())) {
+        epochHash = GetCurrentEpochHash(Params().GetConsensus());
+    } else{
+        epochHash = ParseHashV(request.params[0], "epoch_hash");
+    }
 
     UniValue ret(UniValue::VOBJ);
 
@@ -2415,7 +2420,7 @@ static UniValue getstakingpools(const JSONRPCRequest& request)
         posObj.pushKV("n", (uint64_t) pool.poolPos.n);
         poolObj.pushKV("position", posObj);
 
-        poolObj.pushKV("stake_amount", pool.stakeAmount);
+        poolObj.pushKV("stake_amount", ValueFromAmount(pool.stakeAmount));
         pools.push_back(poolObj);
     }
     ret.pushKV("pools", pools);
@@ -2429,7 +2434,7 @@ static UniValue getstakingpool(const JSONRPCRequest& request)
                 "\nget staking pool information.\n",
                 {
                     {"epoch_hash", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The hash of the epoch"},
-                    {"pool_addres", RPCArg::Type::STR, RPCArg::Optional::NO, "The address of the pool"},
+                    {"pool_address", RPCArg::Type::STR, RPCArg::Optional::NO, "The address of the pool"},
                 },
                 RPCResult{
                     "{\n"
@@ -2442,7 +2447,13 @@ static UniValue getstakingpool(const JSONRPCRequest& request)
 
     LOCK(cs_main);
 
-    uint256 epochHash(ParseHashV(request.params[0], "epoch_hash"));
+    // epoch hash
+    uint256 epochHash;
+    if (request.params[0].isNull() || (request.params[0].isStr() && request.params[0].get_str().empty())) {
+        epochHash = GetCurrentEpochHash(Params().GetConsensus());
+    } else{
+        epochHash = ParseHashV(request.params[0], "epoch_hash");
+    }
 
     // address
     if (!request.params[1].isStr()) {
@@ -2458,17 +2469,28 @@ static UniValue getstakingpool(const JSONRPCRequest& request)
 
     UniValue poolUsers(UniValue::VARR);
     CAmount poolStakeAmount = 0;
-    for (auto &poolUser : ::ChainstateActive().CoinsTip().GetStakingPoolUsers(epochHash, poolID)) {
+    CCoinsViewCache& chain_view = ::ChainstateActive().CoinsTip();
+    for (auto &poolUser : chain_view.GetStakingPoolUsers(epochHash, poolID)) {
         poolStakeAmount += poolUser.stakeAmount;
 
         UniValue userObj(UniValue::VOBJ);
         userObj.pushKV("address", EncodeDestination(ExtractDestination(poolUser.accountID)));
         userObj.pushKV("stake_amount", ValueFromAmount(poolUser.stakeAmount));
         userObj.pushKV("withdrawable_amount", ValueFromAmount(poolUser.withdrawableAmount));
+
+        // pending coin
+        COutPoint withdrawableEntry = CreateStakePendingCoinOutPoint(epochHash, poolID, poolUser.accountID);
+        if (chain_view.HaveCoin(withdrawableEntry)) {
+            UniValue withdrawableUtxo(UniValue::VOBJ);
+            withdrawableUtxo.pushKV("hash", withdrawableEntry.hash.GetHex());
+            withdrawableUtxo.pushKV("n", (uint64_t) withdrawableEntry.n);
+            userObj.pushKV("withdrawable_utxo", withdrawableUtxo);
+        }
+
         poolUsers.push_back(userObj);
     }
     ret.pushKV("users", poolUsers);
-    ret.pushKV("stake_amount", poolStakeAmount);
+    ret.pushKV("stake_amount", ValueFromAmount(poolStakeAmount));
 
     return ret;
 }
@@ -2514,19 +2536,29 @@ static UniValue getstakingpooluser(const JSONRPCRequest& request)
 
     const CBlockIndex *pindex = ::ChainActive().Tip();
     const CBlockIndex* pEpochInitIndex = GetEpochInitIndex(pindex, consensusParams);
-    if (!pEpochInitIndex) {
-        throw JSONRPCError(RPC_INTERNAL_ERROR, "Epoch init block not found");
-    }
+    assert(pEpochInitIndex != nullptr);
+    const uint256 epochHash = pEpochInitIndex->GetBlockHash();
 
     UniValue ret(UniValue::VOBJ);
-    ret.pushKV("epoch_hash", pEpochInitIndex->GetBlockHash().GetHex());
+    ret.pushKV("epoch_hash", epochHash.GetHex());
     ret.pushKV("pool_address", EncodeDestination(ExtractDestination(poolID)));
     ret.pushKV("user_address", EncodeDestination(ExtractDestination(userID)));
 
-    for (auto &poolUser : ::ChainstateActive().CoinsTip().GetStakingPoolUsers(pEpochInitIndex->GetBlockHash(), poolID)) {
+    CCoinsViewCache& chain_view = ::ChainstateActive().CoinsTip();
+    for (auto &poolUser : chain_view.GetStakingPoolUsers(pEpochInitIndex->GetBlockHash(), poolID)) {
         if (poolUser.accountID == userID) {
             ret.pushKV("stake_amount", ValueFromAmount(poolUser.stakeAmount));
             ret.pushKV("withdrawable_amount", ValueFromAmount(poolUser.withdrawableAmount));
+
+            // pending coin
+            COutPoint withdrawableEntry = CreateStakePendingCoinOutPoint(epochHash, poolID, poolUser.accountID);
+            if (chain_view.HaveCoin(withdrawableEntry)) {
+                UniValue withdrawableUtxo(UniValue::VOBJ);
+                withdrawableUtxo.pushKV("hash", withdrawableEntry.hash.GetHex());
+                withdrawableUtxo.pushKV("n", (uint64_t) withdrawableEntry.n);
+                ret.pushKV("withdrawable_utxo", withdrawableUtxo);
+            }
+
             break;
         }
     }

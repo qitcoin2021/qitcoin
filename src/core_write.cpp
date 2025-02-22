@@ -235,9 +235,8 @@ void TxToUniv(const CTransaction& tx, const uint256& hashBlock, UniValue& entry,
         out.pushKV("scriptPubKey", o);
 
         UniValue p(UniValue::VOBJ);
-        if (TxoutPayloadToUniv(txout, nHeight, p)) {
-            out.pushKV("payload", p);
-        }
+        TxoutPayloadToUniv(txout, nHeight, p);
+        out.pushKV("payload", p);
 
         vout.push_back(out);
     }
@@ -253,6 +252,8 @@ void TxToUniv(const CTransaction& tx, const uint256& hashBlock, UniValue& entry,
 
 bool TxoutPayloadToUniv(const CTxOut& txout, int nHeight, UniValue& out)
 {
+    out.pushKV("hex", HexStr(txout.payload));
+
     std::map<std::string,std::string> info;
     auto payload = ExtractTxoutPayload(txout, nHeight, {TXOUT_TYPE_BINDPLOTTER, TXOUT_TYPE_POINT, TXOUT_TYPE_STAKING}, false, &info);
     if (!payload)

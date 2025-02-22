@@ -2337,7 +2337,10 @@ void CWallet::ReacceptWalletTransactions(interfaces::Chain::Lock& locked_chain)
     for (const std::pair<const int64_t, CWalletTx*>& item : mapSorted) {
         CWalletTx& wtx = *(item.second);
         std::string unused_err_string;
-        wtx.SubmitMemoryPoolAndRelay(unused_err_string, false, locked_chain);
+        if (!wtx.SubmitMemoryPoolAndRelay(unused_err_string, false, locked_chain) &&
+            unused_err_string.find("bad-txns-staking-withdraw") != std::string::npos) {
+            AbandonTransaction(locked_chain, wtx.GetHash());
+        }
     }
 }
 
@@ -3062,16 +3065,27 @@ bool CWallet::SignTransaction(CMutableTransaction& tx)
     // sign the new tx
     int nIn = 0;
     for (auto& input : tx.vin) {
+        SignatureData sigdata;
         std::map<uint256, CWalletTx>::const_iterator mi = mapWallet.find(input.prevout.hash);
         if(mi == mapWallet.end() || input.prevout.n >= mi->second.tx->vout.size()) {
-            return false;
+            const Coin &coin = chain().accessCoin(input.prevout);
+            if (!coin.IsSpent()) {
+                const CScript& scriptPubKey = coin.out.scriptPubKey;
+                const CAmount& amount = coin.out.nValue;
+                if (!ProduceSignature(*this, MutableTransactionSignatureCreator(&tx, nIn, amount, SIGHASH_ALL), scriptPubKey, sigdata)) {
+                    return false;
+                }
+            }
+        } else {
+            const CScript& scriptPubKey = mi->second.tx->vout[input.prevout.n].scriptPubKey;
+            const CAmount& amount = mi->second.tx->vout[input.prevout.n].nValue;
+            if (!ProduceSignature(*this, MutableTransactionSignatureCreator(&tx, nIn, amount, SIGHASH_ALL), scriptPubKey, sigdata)) {
+                return false;
+            }
         }
-        const CScript& scriptPubKey = mi->second.tx->vout[input.prevout.n].scriptPubKey;
-        const CAmount& amount = mi->second.tx->vout[input.prevout.n].nValue;
-        SignatureData sigdata;
-        if (!ProduceSignature(*this, MutableTransactionSignatureCreator(&tx, nIn, amount, SIGHASH_ALL), scriptPubKey, sigdata)) {
+        if (!sigdata.complete)
             return false;
-        }
+
         UpdateInput(input, sigdata);
         nIn++;
     }
