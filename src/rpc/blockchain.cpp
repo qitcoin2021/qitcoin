@@ -2377,8 +2377,9 @@ static UniValue getstakingepoch(const JSONRPCRequest& request)
     UniValue ret(UniValue::VOBJ);
     ret.pushKV("epoch_hash", pEpochInitIndex->GetBlockHash().GetHex());
     ret.pushKV("from_height", pEpochInitIndex->nHeight + 1);
-    ret.pushKV("to_height", pEpochInitIndex->nHeight + Params().GetConsensus().nSaturnEpockBlocks);
+    ret.pushKV("to_height", pEpochInitIndex->nHeight + consensusParams.nSaturnEpockBlocks);
     ret.pushKV("initial_staking_pool_amount", ValueFromAmount(GetInitialStakingPoolAmount(pindex->nHeight, consensusParams)));
+    ret.pushKV("genesis_staking_pool_address", EncodeDestination(ExtractDestination(consensusParams.SaturnStakingGenesisID)));
     return ret;
 }
 

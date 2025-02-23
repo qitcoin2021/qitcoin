@@ -174,7 +174,7 @@ Result CreatePointTransaction(CWallet* wallet, const CTxDestination &senderDest,
 //! Create staking transaction.
 Result CreateStakingTransaction(CWallet* wallet, const CTxDestination &poolDest, const CTxDestination &ownerDest,
                                 bool fSubtractFeeFromAmount, const CCoinControl& coin_control,
-                                std::vector<std::string>& errors, CAmount &nAmount, CAmount& txfee, CMutableTransaction& mtx)
+                                std::vector<std::string>& errors, CAmount& nAmount, CAmount& txfee, CMutableTransaction& mtx)
 {
     auto locked_chain = wallet->chain().lock();
     LOCK(wallet->cs_wallet);
@@ -242,7 +242,8 @@ Result CreateStakingTransaction(CWallet* wallet, const CTxDestination &poolDest,
 
 //! Create unfreeze transaction.
 Result CreateUnfreezeTransaction(CWallet* wallet, const COutPoint& outpoint,
-                                 const CCoinControl& coin_control, std::vector<std::string>& errors, CAmount& txfee, CMutableTransaction& mtx)
+                                 const CCoinControl& coin_control, 
+                                 std::vector<std::string>& errors, CAmount& txfee, CMutableTransaction& mtx)
 {
     auto locked_chain = wallet->chain().lock();
     LOCK(wallet->cs_wallet);
@@ -329,29 +330,35 @@ Result CreateUnfreezeTransaction(CWallet* wallet, const COutPoint& outpoint,
 }
 
 //! Create witdhraw pending transaction.
-Result CreateWithdrawPendingTransaction(CWallet* wallet, const COutPoint& outpoint,
-                                        const CCoinControl& coin_control, std::vector<std::string>& errors, CAmount& txfee, CMutableTransaction& mtx)
+Result CreateWithdrawPendingTransaction(CWallet* wallet, const CTxDestination &poolDest, const CTxDestination &userDest,
+                                        const CCoinControl& coin_control,
+                                        std::vector<std::string>& errors, CAmount& nAmount, CAmount& txfee, CMutableTransaction& mtx)
 {
     auto locked_chain = wallet->chain().lock();
     LOCK(wallet->cs_wallet);
 
-    // Check UTXO
-    const Coin &coin = wallet->chain().accessCoin(outpoint);
+    const CAccountID poolID = ExtractAccountID(poolDest);
+    const CAccountID userID = ExtractAccountID(userDest);
+
+    // UTXO
+    const COutPoint withdrawableEntry = CreateStakePendingCoinOutPoint(locked_chain->getCurrentEpochHash(), poolID, userID);
+    const Coin &coin = wallet->chain().accessCoin(withdrawableEntry);
     if (coin.IsSpent()) {
-        errors.push_back(strprintf("Not found coin: %s", outpoint.ToString()));
+        errors.push_back(strprintf("Not found coin: %s", withdrawableEntry.ToString()));
         return Result::INVALID_REQUEST;
     }
 
     // Create transaction
     CMutableTransaction txNew;
     txNew.nLockTime = locked_chain->getHeight().get_value_or(0);
-    txNew.vin = { CTxIn(outpoint, CScript(), CTxIn::SEQUENCE_FINAL - 1) };
+    txNew.vin = { CTxIn(withdrawableEntry, CScript(), CTxIn::SEQUENCE_FINAL - 1) };
     txNew.vout = { CTxOut(coin.out.nValue, coin.out.scriptPubKey, coin.out.payload) };
     txfee = GetMinimumFee(*wallet, 1000, coin_control, nullptr);
     txNew.vout[0].nValue -= txfee;
+    nAmount = txNew.vout[0].nValue;
 
     // Check
-    if (txNew.vin.size() != 1 || txNew.vin[0].prevout != outpoint || txNew.vout.size() != 1 || txNew.vout[0].scriptPubKey != coin.out.scriptPubKey) {
+    if (txNew.vin.size() != 1 || txNew.vin[0].prevout != withdrawableEntry || txNew.vout.size() != 1 || txNew.vout[0].scriptPubKey != coin.out.scriptPubKey) {
         errors.push_back("Error on create withdraw transaction");
         return Result::WALLET_ERROR;
     }

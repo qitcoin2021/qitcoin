@@ -5512,35 +5512,25 @@ static UniValue withdrawpending(const JSONRPCRequest& request)
     pwallet->BlockUntilSyncedToCurrentChain();
 
     // Pool address
-    const CAccountID poolID = ExtractAccountID(DecodeDestination(request.params[0].get_str()));
-    if (poolID.IsNull()) {
-        throw JSONRPCError(RPC_TYPE_ERROR, "Invalid pool address, must from Qitcoin wallet (P2SH address)");
-    }
+    CTxDestination poolDest = DecodeDestination(request.params[0].get_str());
+    if (!IsValidDestination(poolDest))
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid pool address");
 
-    // User address
-    const CAccountID userID = ExtractAccountID(DecodeDestination(request.params[1].get_str()));
-    if (userID.IsNull()) {
-        throw JSONRPCError(RPC_TYPE_ERROR, "Invalid user address, must from Qitcoin wallet (P2SH address)");
-    }
+    CTxDestination userDest = DecodeDestination(request.params[1].get_str());
+    if (!IsValidDestination(userDest))
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid pool address");
 
+    std::vector<std::string> errors;
+    CAmount nAmount = 0;
+    CAmount txfee = 0;
     CMutableTransaction mtx;
-    {
-        auto locked_chain = pwallet->chain().lock();
+    uniformer::Result result;
 
-        // UTXO
-        const uint256 epochHash = GetEpochHash(::ChainActive().Tip(), Params().GetConsensus());
-        const COutPoint withdrawableEntry = CreateStakePendingCoinOutPoint(epochHash, poolID, userID);
-
-        std::vector<std::string> errors;
-        CAmount txfee;
-        uniformer::Result result;
-
-        // Create transaction
-        CCoinControl coin_control;
-        result = uniformer::CreateWithdrawPendingTransaction(pwallet, withdrawableEntry, coin_control, errors, txfee, mtx);
-        if (result != uniformer::Result::OK) {
-            throw JSONRPCError(RPC_WALLET_ERROR, strprintf("Create transaction error(%d): %s", (uint32_t)result, errors.empty() ? "Unknown" : errors[0]));
-        }
+    // Create transaction
+    CCoinControl coin_control;
+    result = uniformer::CreateWithdrawPendingTransaction(pwallet, poolDest, userDest, coin_control, errors, nAmount, txfee, mtx);
+    if (result != uniformer::Result::OK) {
+        throw JSONRPCError(RPC_WALLET_ERROR, strprintf("Create transaction error(%d): %s", (uint32_t)result, errors.empty() ? "Unknown" : errors[0]));
     }
 
     // Sign transaction
