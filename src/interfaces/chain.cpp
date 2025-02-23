@@ -449,6 +449,13 @@ public:
         LOCK(::cs_main);
         return ::ChainstateActive().CoinsTip().AccessCoin(outpoint);
     }
+
+    CStakingPoolList getStakingPools() override
+    {
+        LOCK(::cs_main);
+        const uint256 epochHash = ::GetCurrentEpochHash(Params().GetConsensus());
+        return ::ChainstateActive().CoinsTip().GetStakingPools(epochHash);
+    }
 };
 } // namespace
 

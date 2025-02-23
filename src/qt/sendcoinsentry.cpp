@@ -25,41 +25,6 @@
 #include <QApplication>
 #include <QClipboard>
 
-#include <array>
-
-static const int hour_blocks = 3600 / 180;
-static const int day_blocks = 86400 / 180;
-
-static const std::array<int, 5> bindActiveHeights = { {1*hour_blocks, 1*24*hour_blocks, 2*24*hour_blocks, 3*24*hour_blocks, PROTOCOL_BINDPLOTTER_MAXALIVE} };
-static int getPlotterDataValidHeightForIndex(int index) {
-    if (index + 1 > static_cast<int>(bindActiveHeights.size())) {
-        return bindActiveHeights.back();
-    }
-    if (index < 0) {
-        return bindActiveHeights[0];
-    }
-    return bindActiveHeights[index];
-}
-static int getIndexForPlotterDataValidHeight(int height) {
-    for (unsigned int i = 0; i < bindActiveHeights.size(); i++) {
-        if (bindActiveHeights[i] >= height) {
-            return i;
-        }
-    }
-    return bindActiveHeights.size() - 1;
-}
-
-static const std::array<int, 2> blockBlocks = { {360 * day_blocks, 540 * day_blocks} };
-static int getLockBlocksForIndex(int index) {
-    if (index+1 > static_cast<int>(blockBlocks.size())) {
-        return blockBlocks.back();
-    }
-    if (index < 0) {
-        return blockBlocks[0];
-    }
-    return blockBlocks[index];
-}
-
 SendCoinsEntry::SendCoinsEntry(PayOperateMethod payOperateMethod, const PlatformStyle *_platformStyle, QWidget *parent) :
     QStackedWidget(parent),
     payOperateMethod(payOperateMethod),
@@ -69,14 +34,10 @@ SendCoinsEntry::SendCoinsEntry(PayOperateMethod payOperateMethod, const Platform
 {
     ui->setupUi(this);
 
-    ui->plotterPassphraseLabel->setVisible(false);
-    ui->plotterPassphrase->setVisible(false);
-    ui->plotterDataAliveHeightLabel->setVisible(false);
-    ui->plotterDataValidHeightSelector->setVisible(false);
-    ui->plotterBindTypeLabel->setVisible(false);
-    ui->plotterBindTypeSelector->setVisible(false);
-    ui->lockBlocksLabel->setVisible(false);
-    ui->lockBlocksSelector->setVisible(false);
+    ui->stakingPoolLabel->setVisible(false);
+    ui->stakingPoolSelector->setVisible(false);
+    ui->reloadStakingPools->setVisible(false);
+    ui->createStakingPool->setVisible(false);
 
     ui->addressBookButton->setIcon(platformStyle->SingleColorIcon(":/icons/address-book"));
     ui->pasteButton->setIcon(platformStyle->SingleColorIcon(":/icons/editpaste"));
@@ -105,53 +66,12 @@ SendCoinsEntry::SendCoinsEntry(PayOperateMethod payOperateMethod, const Platform
     connect(ui->useAvailableBalanceButton, &QPushButton::clicked, this, &SendCoinsEntry::useAvailableBalanceClicked);
 
     // Pay method
-    if (payOperateMethod == PayOperateMethod::BindPlotter) {
-        ui->payToLabel->setText(tr("Bind &To:"));
-        ui->labellLabel->setVisible(false);
-        ui->addAsLabel->setVisible(false);
-        ui->amountLabel->setVisible(false);
-        ui->payAmount->setVisible(false);
-        ui->checkboxSubtractFeeFromAmount->setVisible(false);
-        ui->useAvailableBalanceButton->setVisible(false);
-        ui->plotterPassphraseLabel->setVisible(true);
-        ui->plotterPassphrase->setVisible(true);
-        ui->plotterPassphrase->setPlaceholderText(tr("Enter your plotter passphrase or bind hex data"));
-        ui->plotterDataAliveHeightLabel->setVisible(true);
-        ui->plotterDataValidHeightSelector->setVisible(true);
-        ui->plotterBindTypeLabel->setVisible(true);
-        ui->plotterBindTypeSelector->setVisible(true);
-
-        for (const int n : bindActiveHeights) {
-            assert(n > 0 && n <= PROTOCOL_BINDPLOTTER_MAXALIVE);
-            ui->plotterDataValidHeightSelector->addItem(tr("%1 (%2 blocks)")
-                .arg(GUIUtil::formatNiceTimeOffset(n*Params().GetConsensus().nPowTargetSpacing))
-                .arg(n));
-        }
-        ui->plotterDataValidHeightSelector->setCurrentIndex(getIndexForPlotterDataValidHeight(PROTOCOL_BINDPLOTTER_DEFAULTMAXALIVE));
-
-        ui->plotterBindTypeSelector->addItem(tr("PoC"));
-        ui->plotterBindTypeSelector->addItem(tr("PoS"));
-        ui->plotterBindTypeSelector->setCurrentIndex(0);
-    } else if (payOperateMethod == PayOperateMethod::Point) {
-        ui->payToLabel->setText(tr("Point &To:"));
-        ui->lockBlocksLabel->setVisible(true);
-        ui->lockBlocksSelector->setVisible(true);
-        for (const int n : blockBlocks) {
-            ui->lockBlocksSelector->addItem(tr("%1 (%2 blocks)")
-                .arg(GUIUtil::formatNiceTimeOffset(n*Params().GetConsensus().nPowTargetSpacing))
-                .arg(n));
-        }
-        ui->lockBlocksSelector->setCurrentIndex(0);
-    } else if (payOperateMethod == PayOperateMethod::Staking) {
-        ui->payToLabel->setText(tr("Staking &To:"));
-        ui->lockBlocksLabel->setVisible(true);
-        ui->lockBlocksSelector->setVisible(true);
-        for (const int n : blockBlocks) {
-            ui->lockBlocksSelector->addItem(tr("%1 (%2 blocks)")
-                .arg(GUIUtil::formatNiceTimeOffset(n*Params().GetConsensus().nPowTargetSpacing))
-                .arg(n));
-        }
-        ui->lockBlocksSelector->setCurrentIndex(0);
+    if (payOperateMethod == PayOperateMethod::Staking) {
+        ui->payToLabel->setText(tr("&Owner:"));
+        ui->stakingPoolLabel->setVisible(true);
+        ui->stakingPoolSelector->setVisible(true);
+        ui->reloadStakingPools->setVisible(true);
+        ui->createStakingPool->setVisible(true);
     }
 }
 
@@ -170,7 +90,7 @@ void SendCoinsEntry::on_addressBookButton_clicked()
 {
     if(!model)
         return;
-    AddressBookPage::Tabs tab = (payOperateMethod == PayOperateMethod::BindPlotter ? AddressBookPage::ReceivingTab : AddressBookPage::SendingTab);
+    AddressBookPage::Tabs tab = (payOperateMethod == PayOperateMethod::Staking ? AddressBookPage::ReceivingTab : AddressBookPage::SendingTab);
     AddressBookPage dlg(platformStyle, AddressBookPage::ForSelection, tab, this);
     dlg.setModel(model->getAddressTableModel());
     if(dlg.exec())
@@ -185,6 +105,28 @@ void SendCoinsEntry::on_payTo_textChanged(const QString &address)
     updateLabel(address);
 }
 
+void SendCoinsEntry::on_reloadStakingPools_clicked()
+{
+    if(!model)
+        return;
+
+    for (const auto &pool : model->wallet().chain().getStakingPools()) {
+        std::string poolAddress = EncodeDestination(ExtractDestination(pool.poolID));
+        std::string poolAmount = std::to_string(pool.stakeAmount / COIN);
+        ui->stakingPoolSelector->addItem(QString::fromStdString(poolAddress) + " (" + QString::fromStdString(poolAmount) + " QTC)");
+    }
+    if (ui->stakingPoolSelector->count() > 0)
+        ui->stakingPoolSelector->setCurrentIndex(0);
+}
+
+void SendCoinsEntry::on_createStakingPool_clicked()
+{
+    if(!model)
+        return;
+
+    model->createStakingPool(ui->payTo->text());
+}
+
 void SendCoinsEntry::setModel(WalletModel *_model)
 {
     this->model = _model;
@@ -192,6 +134,7 @@ void SendCoinsEntry::setModel(WalletModel *_model)
     if (_model && _model->getOptionsModel())
         connect(_model->getOptionsModel(), &OptionsModel::displayUnitChanged, this, &SendCoinsEntry::updateDisplayUnit);
 
+    on_reloadStakingPools_clicked();
     clear();
 }
 
@@ -200,7 +143,6 @@ void SendCoinsEntry::clear()
     // clear UI elements for normal payment
     ui->payTo->clear();
     ui->addAsLabel->clear();
-    ui->plotterPassphrase->clear();
     ui->payAmount->clear();
     ui->checkboxSubtractFeeFromAmount->setCheckState(Qt::Unchecked);
     ui->messageTextLabel->clear();
@@ -217,12 +159,6 @@ void SendCoinsEntry::clear()
 
     // update the display unit, to not use the default ("BTC")
     updateDisplayUnit();
-
-    // Update for bind plotter
-    if (payOperateMethod == PayOperateMethod::BindPlotter) {
-        ui->payAmount->setValue(PROTOCOL_BINDPLOTTER_LOCKAMOUNT);
-        ui->checkboxSubtractFeeFromAmount->setCheckState(Qt::Unchecked);
-    }
 }
 
 void SendCoinsEntry::checkSubtractFeeFromAmount()
@@ -279,27 +215,14 @@ bool SendCoinsEntry::validate(interfaces::Node& node)
     }
 
     // Special tx amount
-    if (payOperateMethod == PayOperateMethod::BindPlotter)
-    {
-        QString passphrase = ui->plotterPassphrase->text().trimmed();
-        if (!IsValidPassphrase(passphrase.toStdString())) {
-            ui->plotterPassphrase->setValid(false);
-            retval = false;
-        }
-    }
-    else if (payOperateMethod == PayOperateMethod::Point)
-    {
-        if (ui->payAmount->value() < PROTOCOL_POINT_AMOUNT_MIN ||
-                (ui->checkboxSubtractFeeFromAmount->checkState() == Qt::Checked && ui->payAmount->value() <= PROTOCOL_POINT_AMOUNT_MIN)) {
-            ui->payAmount->setValid(false);
-            retval = false;
-        }
-    }
-    else if (payOperateMethod == PayOperateMethod::Staking)
+    if (payOperateMethod == PayOperateMethod::Staking)
     {
         if (ui->payAmount->value() < PROTOCOL_STAKING_AMOUNT_MIN ||
                 (ui->checkboxSubtractFeeFromAmount->checkState() == Qt::Checked && ui->payAmount->value() <= PROTOCOL_STAKING_AMOUNT_MIN)) {
             ui->payAmount->setValid(false);
+            retval = false;
+        }
+        if (ui->stakingPoolSelector->currentText().isEmpty()) {
             retval = false;
         }
     }
@@ -321,37 +244,10 @@ SendCoinsRecipient SendCoinsEntry::getValue()
     recipient.amount = ui->payAmount->value();
     recipient.message = ui->messageTextLabel->text();
     recipient.fSubtractFeeFromAmount = (ui->checkboxSubtractFeeFromAmount->checkState() == Qt::Checked);
-    if (payOperateMethod == PayOperateMethod::BindPlotter) {
-        QString plotterPassphrase = ui->plotterPassphrase->text().trimmed();
-        if ((plotterPassphrase.size() == PROTOCOL_BINDPLOTTER_POC_SCRIPTSIZE * 2
-                || plotterPassphrase.size() == PROTOCOL_BINDPLOTTER_POS_SCRIPTSIZE * 2)
-            && IsHex(plotterPassphrase.toStdString())) {
-            // use bind data
-            std::vector<unsigned char> bindData(ParseHex(plotterPassphrase.toStdString()));
-           recipient.payload = CScript(bindData.cbegin(), bindData.cend());
-        } else if (ui->plotterBindTypeSelector->currentIndex() == 1) {
-            // use passphrase for PoS
-            auto farmerPrivateKey = pos::DeriveMasterToFarmer(pos::GeneratePrivateKey(plotterPassphrase.toStdString()));
-            int nTipHeight = model->wallet().chain().lock()->getHeight().get();
-            int plotterDataAliveHeight = getPlotterDataValidHeightForIndex(ui->plotterDataValidHeightSelector->currentIndex());
-            recipient.payload = GetBindPlotterScriptForDestination(DecodeDestination(recipient.address.toStdString()), farmerPrivateKey, nTipHeight + plotterDataAliveHeight);
-        } else {
-            // use passphrase for PoC
-            int nTipHeight = model->wallet().chain().lock()->getHeight().get();
-            int plotterDataAliveHeight = getPlotterDataValidHeightForIndex(ui->plotterDataValidHeightSelector->currentIndex());
-            recipient.payload = GetBindPlotterScriptForDestination(DecodeDestination(recipient.address.toStdString()), plotterPassphrase.toStdString(), nTipHeight + plotterDataAliveHeight);
-        }
-    }
-    else if (payOperateMethod == PayOperateMethod::Point) {
-        int lockBlocks = getLockBlocksForIndex(ui->lockBlocksSelector->currentIndex());
-        recipient.payload = GetPointScriptForDestination(DecodeDestination(recipient.address.toStdString()), lockBlocks);
-        recipient.address = QString::fromStdString(EncodeDestination(model->wallet().getPrimaryAddress())); // rewrite lock to primary address
-        recipient.label = "";
-    }
-    else if (payOperateMethod == PayOperateMethod::Staking) {
-        int lockBlocks = getLockBlocksForIndex(ui->lockBlocksSelector->currentIndex());
-        recipient.payload = GetStakingScriptForDestination(DecodeDestination(recipient.address.toStdString()), lockBlocks);
-        recipient.address = QString::fromStdString(EncodeDestination(model->wallet().getPrimaryAddress())); // rewrite lock to primary address
+    if (payOperateMethod == PayOperateMethod::Staking) {
+        QString poolAddress = ui->stakingPoolSelector->currentText().split(" ")[0];
+        recipient.payload = GetStakingScriptForDestination(DecodeDestination(poolAddress.toStdString()), PROTOCOL_STAKING_LOCK_BLOCKS_FULL_AMOUNT);
+        recipient.address = recipient.address;
         recipient.label = "";
     }
 
@@ -362,8 +258,7 @@ QWidget *SendCoinsEntry::setupTabChain(QWidget *prev)
 {
     QWidget::setTabOrder(prev, ui->payTo);
     QWidget::setTabOrder(ui->payTo, ui->addAsLabel);
-    QWidget::setTabOrder(ui->addAsLabel, ui->plotterPassphrase);
-    QWidget *w = ui->payAmount->setupTabChain(ui->plotterPassphrase);
+    QWidget *w = ui->payAmount->setupTabChain(ui->addAsLabel);
     QWidget::setTabOrder(w, ui->checkboxSubtractFeeFromAmount);
     QWidget::setTabOrder(ui->checkboxSubtractFeeFromAmount, ui->addressBookButton);
     QWidget::setTabOrder(ui->addressBookButton, ui->pasteButton);

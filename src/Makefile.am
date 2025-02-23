@@ -641,9 +641,9 @@ qitcoin_wallet_SOURCES += bitcoin-wallet-res.rc
 endif
 
 qitcoin_wallet_LDADD = \
-  $(LIBBITCOIN_SERVER) \
   $(LIBBITCOIN_WALLET_TOOL) \
   $(LIBBITCOIN_WALLET) \
+  $(LIBBITCOIN_SERVER) \
   $(LIBBITCOIN_COMMON) \
   $(LIBBITCOIN_CONSENSUS) \
   $(LIBBITCOIN_UTIL) \

@@ -343,6 +343,28 @@ public:
         return uniformer::CommitTransaction(m_wallet.get(), std::move(mtx), mapValue_t{}, errors) ==
                uniformer::Result::OK;
     }
+    bool createStakingPoolTransaction(const CTxDestination &poolOwnerDest,
+        std::vector<std::string>& errors,
+        CAmount& total_lock,
+        CAmount& total_fee,
+        CMutableTransaction& mtx) override
+    {
+        CCoinControl coin_control;
+        return uniformer::CreateStakingTransaction(m_wallet.get(), CNoDestination(), poolOwnerDest, false, coin_control, errors, total_lock, total_fee, mtx) ==
+            uniformer::Result::OK;
+    }
+    bool signAndCommitStakingPoolTransaction(CMutableTransaction&& mtx, std::vector<std::string>& errors) override
+    {
+        // sign
+        if (!uniformer::SignTransaction(m_wallet.get(), mtx)) {
+            errors.push_back("Bad sign");
+            return false;
+        }
+
+        // commit
+        return uniformer::CommitTransaction(m_wallet.get(), std::move(mtx), mapValue_t{}, errors) ==
+               uniformer::Result::OK;
+    }
     CTransactionRef getTx(const uint256& txid) override
     {
         auto locked_chain = m_wallet->chain().lock();

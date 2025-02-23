@@ -54,8 +54,6 @@ QT_END_NAMESPACE
 /** Pay operate method */
 enum class PayOperateMethod {
     Pay,         //! Normal pay
-    BindPlotter, //! Bind plotter
-    Point,       //! Point
     Staking,     //! Staking
 };
 
@@ -227,6 +225,8 @@ public:
 
     bool bumpFee(uint256 hash, uint256& new_hash);
     bool unfreezeTransaction(uint256 hash);
+
+    bool createStakingPool(const QString &poolOwnerAddress);
 
     static bool isWalletEnabled();
     bool privateKeysDisabled() const;

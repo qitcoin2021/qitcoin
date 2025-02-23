@@ -214,6 +214,16 @@ public:
     //! Sign and commit unfreeze transaction
     virtual bool signAndCommitUnfreezeTransaction(CMutableTransaction&& mtx, std::vector<std::string>& errors) = 0;
 
+    //! Create staking pool transaction.
+    virtual bool createStakingPoolTransaction(const CTxDestination &poolOwnerDest,
+        std::vector<std::string>& errors,
+        CAmount& total_lock,
+        CAmount& total_fee,
+        CMutableTransaction& mtx) = 0;
+
+    //! Sign and commit staking pool transaction
+    virtual bool signAndCommitStakingPoolTransaction(CMutableTransaction&& mtx, std::vector<std::string>& errors) = 0;
+
     //! Get a transaction.
     virtual CTransactionRef getTx(const uint256& txid) = 0;
 

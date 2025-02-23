@@ -1142,29 +1142,6 @@ Note:  Since the fee is calculated on a per-byte basis, a fee of "100 satoshis p
       </widget>
      </item>
      <item>
-      <widget class="QPushButton" name="checkBindDataButton">
-       <property name="minimumSize">
-        <size>
-         <width>150</width>
-         <height>0</height>
-        </size>
-       </property>
-       <property name="toolTip">
-        <string>Check and generate bind data</string>
-       </property>
-       <property name="text">
-        <string>&amp;Check/Generate</string>
-       </property>
-       <property name="icon">
-        <iconset resource="../bitcoin.qrc">
-         <normaloff>:/icons/key</normaloff>:/icons/key</iconset>
-       </property>
-       <property name="autoDefault">
-        <bool>false</bool>
-       </property>
-      </widget>
-     </item>
-     <item>
       <widget class="QPushButton" name="clearButton">
        <property name="sizePolicy">
         <sizepolicy hsizetype="Minimum" vsizetype="Fixed">

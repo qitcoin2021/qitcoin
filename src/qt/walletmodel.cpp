@@ -672,6 +672,47 @@ bool WalletModel::unfreezeTransaction(uint256 hash)
     return true;
 }
 
+bool WalletModel::createStakingPool(const QString &poolOwnerAddress)
+{
+    CTxDestination poolOwnerDest = DecodeDestination(poolOwnerAddress.toStdString());
+    if (!IsValidDestination(poolOwnerDest))
+        return false;
+
+    std::vector<std::string> errors;
+    CAmount nInitialStakingPoolAmount = 0;
+    CAmount total_fee = 0;
+    CMutableTransaction mtx;
+    if (!m_wallet->createStakingPoolTransaction(poolOwnerDest, errors, nInitialStakingPoolAmount, total_fee, mtx)) {
+        QMessageBox::critical(0, tr("Create staking pool error"), tr("Could not create transaction") + "<br />(" +
+                (errors.size() ? QString::fromStdString(errors[0]) : "") +")");
+        return false;
+    }
+
+    QString questionString = tr("Are you sure you want to create staking pool?");
+    questionString.append("<br />");
+    questionString.append("<table style=\"text-align: left;\">");
+    questionString.append("<tr><td width=100>").append(tr("Owner address:")).append("</td><td>").append(poolOwnerAddress);
+    questionString.append("</td></tr>");
+    questionString.append("<tr><td>").append(tr("Lock amount:")).append("</td><td>").append(BitcoinUnits::formatHtmlWithUnit(getOptionsModel()->getDisplayUnit(), mtx.vout[0].nValue)).append("</td></tr>");
+    questionString.append("<tr style='color:#aa0000;'><td>").append(tr("Transaction fee:")).append("</td><td>").append(BitcoinUnits::formatHtmlWithUnit(getOptionsModel()->getDisplayUnit(), total_fee)).append("</td></tr>");
+    questionString.append("</table>");
+    SendConfirmationDialog confirmationDialog(tr("Create staking pool"), questionString);
+    if (confirmationDialog.exec() != QMessageBox::Yes) {
+        return false;
+    }
+
+    // Sign and commit
+    WalletModel::UnlockContext ctx(requestUnlock());
+    if(!ctx.isValid())
+        return false;
+    if (!m_wallet->signAndCommitStakingPoolTransaction(std::move(mtx), errors)) {
+        QMessageBox::critical(0, tr("Create staking pool error"), tr("Could not commit transaction") + "<br />(" +
+                (errors.size() ? QString::fromStdString(errors[0]) : "") +")");
+        return false;
+    }
+    return true;
+}
+
 bool WalletModel::isWalletEnabled()
 {
    return !gArgs.GetBoolArg("-disablewallet", DEFAULT_DISABLE_WALLET);

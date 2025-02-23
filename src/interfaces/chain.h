@@ -299,6 +299,9 @@ public:
 
     //! Return coin from coins tip.
     virtual const Coin& accessCoin(const COutPoint &outpoint) = 0;
+
+    //! Get epoch staking pools.
+    virtual CStakingPoolList getStakingPools() = 0;
 };
 
 //! Interface to let node manage chain clients (wallets, or maybe tools for

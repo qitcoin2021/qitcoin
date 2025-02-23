@@ -95,6 +95,7 @@ public:
         SelfPoint,
         WithdrawPoint,
         // staking
+        StakingPoolInitial,
         StakingSent,
         StakingReceived,
         SelfStaking,

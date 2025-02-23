@@ -73,20 +73,16 @@ SendCoinsDialog::SendCoinsDialog(const PlatformStyle *_platformStyle, QWidget *p
         ui->addButton->setIcon(QIcon());
         ui->clearButton->setIcon(QIcon());
         ui->sendButton->setIcon(QIcon());
-        ui->checkBindDataButton->setIcon(QIcon());
     } else {
         ui->addButton->setIcon(_platformStyle->SingleColorIcon(":/icons/add"));
         ui->clearButton->setIcon(_platformStyle->SingleColorIcon(":/icons/remove"));
         ui->sendButton->setIcon(_platformStyle->SingleColorIcon(":/icons/send"));
-        ui->checkBindDataButton->setIcon(_platformStyle->SingleColorIcon(":/icons/key"));
     }
 
     GUIUtil::setupAddressWidget(ui->lineEditCoinControlChange, this);
 
     // Operate method
     ui->operateMethodComboBox->addItem(tr("Pay to"), (int)PayOperateMethod::Pay);
-    ui->operateMethodComboBox->addItem(tr("Bind to"), (int)PayOperateMethod::BindPlotter);
-    ui->operateMethodComboBox->addItem(tr("Point to"), (int)PayOperateMethod::Point);
     ui->operateMethodComboBox->addItem(tr("Staking to"), (int)PayOperateMethod::Staking);
     addEntry();
 
@@ -248,8 +244,6 @@ void SendCoinsDialog::onOperateMethodComboBoxChanged(int index)
         int opMethodValue = ui->operateMethodComboBox->itemData(index).toInt();
         switch ((PayOperateMethod)opMethodValue)
         {
-        case PayOperateMethod::BindPlotter:
-        case PayOperateMethod::Point:
         case PayOperateMethod::Staking:
             ui->clearButton->setVisible(false);
             ui->addButton->setVisible(false);
@@ -264,8 +258,6 @@ void SendCoinsDialog::onOperateMethodComboBoxChanged(int index)
         }
 
         ui->frameCoinControl->setVisible(model->getOptionsModel()->getCoinControlFeatures());
-        ui->frameFee->setVisible((PayOperateMethod) opMethodValue != PayOperateMethod::BindPlotter);
-        ui->checkBindDataButton->setVisible((PayOperateMethod) opMethodValue == PayOperateMethod::BindPlotter);
 
         clear();
         setBalance(model->wallet().getBalances());
@@ -326,44 +318,7 @@ void SendCoinsDialog::on_sendButton_clicked()
     // Check tx payload
     std::map<std::string, std::string> payloadInfo;
     CTxOutPayloadRef payload;
-    if (operateMethod == PayOperateMethod::BindPlotter) {
-        CTxOut txout(recipients[0].amount, GetScriptForDestination(DecodeDestination(recipients[0].address.toStdString())), recipients[0].payload);
-        payload = ExtractTxoutPayload(txout, nSpendHeight, {TXOUT_TYPE_BINDPLOTTER}, true, &payloadInfo);
-        if (!payload || payload->type != TXOUT_TYPE_BINDPLOTTER) {
-            QMessageBox msgBox(QMessageBox::Warning,
-                tr("Bind plotter"),
-                tr("Invalid bind plotter recipients!"),
-                QMessageBox::Close, this);
-            msgBox.exec();
-            return;
-        }
-
-        if (chain.haveActiveBindPlotter(ExtractAccountID(DecodeDestination(recipients[0].address.toStdString())), BindPlotterPayload::As(payload)->GetId())) {
-            QMessageBox msgBox(QMessageBox::Warning,
-                tr("Bind plotter"),
-                tr("The plotter %1 already binded to %2.").arg(QString::number(BindPlotterPayload::As(payload)->GetId()), recipients[0].address),
-                QMessageBox::Close, this);
-            msgBox.exec();
-            return;
-        }
-        if (BindPlotterPayload::As(payload)->eType == BindPlotterPayload::Type::PoS && nSpendHeight < params.nMercuryActiveHeight) {
-            QMessageBox msgBox(QMessageBox::Warning,
-                tr("Bind plotter"),
-                tr("The PoS bind plotter has not actived."),
-                QMessageBox::Close, this);
-            msgBox.exec();
-            return;
-        }
-    } else if (operateMethod == PayOperateMethod::Point) {
-        CTxOut txout(recipients[0].amount, GetScriptForDestination(DecodeDestination(recipients[0].address.toStdString())), recipients[0].payload);
-        payload = ExtractTxoutPayload(txout, nSpendHeight, {TXOUT_TYPE_POINT});
-        if (!payload || payload->type != TXOUT_TYPE_POINT) {
-            prepareStatus = WalletModel::SendCoinsReturn(WalletModel::TransactionCreationFailed);
-            QMessageBox msgBox(QMessageBox::Warning, tr("Point"), tr("Invalid point recipients!"), QMessageBox::Close, this);
-            msgBox.exec();
-            return;
-        }
-    } else if (operateMethod == PayOperateMethod::Staking) {
+    if (operateMethod == PayOperateMethod::Staking) {
         CTxOut txout(recipients[0].amount, GetScriptForDestination(DecodeDestination(recipients[0].address.toStdString())), recipients[0].payload);
         payload = ExtractTxoutPayload(txout, nSpendHeight, {TXOUT_TYPE_STAKING});
         if (!payload || payload->type != TXOUT_TYPE_STAKING) {
@@ -376,33 +331,9 @@ void SendCoinsDialog::on_sendButton_clicked()
 
     // Always use a CCoinControl instance, use the CoinControlDialog instance if CoinControl has been enabled
     CCoinControl ctrl;
-    if (operateMethod == PayOperateMethod::BindPlotter)
-    {
-        if (model->node().isInitialBlockDownload()){
-            QMessageBox msgBox(QMessageBox::Warning, tr("Bind plotter"), tr("Please wait block sync!"), QMessageBox::Ok, this);
-            msgBox.exec();
-            return;
-        }
-
-        // Update bind fee
-        auto bindPunishment = chain.getBindPlotterPunishment(nSpendHeight, BindPlotterPayload::As(payload)->GetId());
-        if (bindPunishment.first > 0) {
-            ctrl.m_min_txfee = std::max(ctrl.m_min_txfee, bindPunishment.first);
-            QString information = tr("This binding operation triggers anti-cheating mechanism and therefore requires a large transaction fee %1.")
-                .arg("<span style='color:#aa0000;'>" + BitcoinUnits::formatHtmlWithUnit(model->getOptionsModel()->getDisplayUnit(), ctrl.m_min_txfee) + "</span>");
-            QMessageBox msgBox(QMessageBox::Warning, tr("Bind plotter"), information, QMessageBox::Ok|QMessageBox::Cancel, this);
-            if (msgBox.exec() == QMessageBox::Cancel)
-                return;
-
-            nBindLimitHeight = bindPunishment.second;
-        }
-    }
-    else
-    {
-        if (model->getOptionsModel()->getCoinControlFeatures())
-            ctrl = *CoinControlDialog::coinControl();
-        updateCoinControlState(ctrl);
-    }
+    if (model->getOptionsModel()->getCoinControlFeatures())
+        ctrl = *CoinControlDialog::coinControl();
+    updateCoinControlState(ctrl);
 
     prepareStatus = model->prepareTransaction(currentTransaction, ctrl);
 
@@ -460,48 +391,7 @@ void SendCoinsDialog::on_sendButton_clicked()
     }
 
     QString titleString, questionString;
-    if (operateMethod == PayOperateMethod::BindPlotter)
-    {
-        assert(payload && payload->type == TXOUT_TYPE_BINDPLOTTER);
-
-        titleString = tr("Confirm bind plotter");
-        questionString = "<span style='color:#aa0000;'><b>" + tr("Are you sure you want to send?") + "</b></span>";
-
-        const SendCoinsRecipient &rcp = recipients[0];
-        QString amount = "<b>" + BitcoinUnits::formatHtmlWithUnit(model->getOptionsModel()->getDisplayUnit(), rcp.amount) + "</b>";
-        QString plotterId = "<b>" + QString::number(BindPlotterPayload::As(payload)->GetId()) + "</b>";
-        QString address;
-        if (rcp.label.length() > 0)
-            address = GUIUtil::HtmlEscape(rcp.label) + "(<span style='font-family: monospace;'>" + rcp.address + "</span>)";
-        else
-            address = "<span style='font-family: monospace;'>" + rcp.address + "</span>";
-
-        formatted.clear();
-        formatted.append(tr("%1 bind to %2").arg(plotterId, address));
-        formatted.append(tr("Public Key: %1").arg(QString::fromStdString(payloadInfo["pubkey"])));
-        formatted.append(tr("Bind Type: %1").arg(QString::fromStdString(payloadInfo["type"])));
-        formatted.append(tr("The operation will lock %1.").arg(amount));
-        formatted.append(tr("You can unbind later, and the locked amount will be returned to this address."));
-    }
-    else if (operateMethod == PayOperateMethod::Point)
-    {
-        assert(payload && payload->type == TXOUT_TYPE_POINT);
-
-        titleString = tr("Confirm point coins");
-        questionString = "<span style='color:#aa0000;'><b>" + tr("Are you sure you want send?") + "</b></span>";
-
-        const SendCoinsRecipient &rcp = recipients[0];
-        QString lockAmount = "<b>" + BitcoinUnits::formatHtmlWithUnit(model->getOptionsModel()->getDisplayUnit(), rcp.amount) + "</b>";
-        QString lockInAddress = "<span style='font-family: monospace;'>" + rcp.address + "</span>";
-        QString recvAmount = "<b>" + BitcoinUnits::formatHtmlWithUnit(model->getOptionsModel()->getDisplayUnit(), PointPayload::As(payload)->GetAmount()) + "</b>";
-        QString recvAddress = "<span style='font-family: monospace;'>" + QString::fromStdString(EncodeDestination(ExtractDestination(PointPayload::As(payload)->GetReceiverID()))) + "</span>";
-
-        formatted.clear();
-        formatted.append(tr("Point %1 to %2, and lock %3 blocks.").arg(recvAmount, recvAddress, QString::number(PointPayload::As(payload)->GetLockBlocks())));
-        formatted.append(tr("The operation will lock %1 in %2.").arg(lockAmount, lockInAddress));
-        formatted.append(tr("You can withdraw this point at lock timeout, and the amount will be returned to this address."));
-    }
-    else if (operateMethod == PayOperateMethod::Staking)
+    if (operateMethod == PayOperateMethod::Staking)
     {
         assert(payload && payload->type == TXOUT_TYPE_STAKING);
 
@@ -540,21 +430,6 @@ void SendCoinsDialog::on_sendButton_clicked()
         questionString.append("<span style='color:#aa0000; font-weight:bold;'>");
         questionString.append(BitcoinUnits::formatHtmlWithUnit(model->getOptionsModel()->getDisplayUnit(), txFee));
         questionString.append("</span><br />");
-
-        // append bindplotter limit notice
-        if (operateMethod == PayOperateMethod::BindPlotter && nBindLimitHeight > 0) {
-            questionString.append("<span style='color:#aa0000;'>").
-                append(tr("This binding operation triggers anti-cheating mechanism and therefore requires a large transaction fee %1.").
-                    arg(BitcoinUnits::formatHtmlWithUnit(model->getOptionsModel()->getDisplayUnit(), txFee))).
-                append("</span>");
-            questionString.append("<br />").
-                append(tr("%1 small bind plotter fee active on %2 block height (%3 blocks after, about %4 minute).").
-                        arg("<b>" + QString::number(BindPlotterPayload::As(payload)->GetId()) + "</b>",
-                            QString::number(nBindLimitHeight),
-                            QString::number(nBindLimitHeight - nSpendHeight),
-                            QString::number((nBindLimitHeight - nSpendHeight) * params.nPowTargetSpacing / 60)));
-            questionString.append("<br />");
-        }
 
         // append RBF message according to transaction's signalling
         if (ui->frameFee->isVisible()) {
@@ -612,60 +487,6 @@ void SendCoinsDialog::on_sendButton_clicked()
         CoinControlDialog::coinControl()->UnSelectAll();
         coinControlUpdateLabels();
         Q_EMIT coinsSent(currentTransaction.getWtx()->GetHash());
-    }
-}
-
-void SendCoinsDialog::on_checkBindDataButton_clicked()
-{
-    if (!model || !model->getOptionsModel() || ui->entries->count() != 1)
-        return;
-    if (clientModel->getHeaderTipTime() < (GetTime() - nMaxTipAge)) {
-        QMessageBox msgBox(QMessageBox::Warning, tr("Bind plotter"), tr("Please wait block header sync!"), QMessageBox::Ok, this);
-        msgBox.exec();
-        return;
-    }
-    int nTipHeight = clientModel->getHeaderTipHeight(); // Use header tip height generate and check bind data
-
-    SendCoinsEntry *entry = qobject_cast<SendCoinsEntry*>(ui->entries->itemAt(0)->widget());
-    if (!entry->validate(model->node()))
-        return;
-    const SendCoinsRecipient recipient = entry->getValue();
-    CTxDestination bindToDest = DecodeDestination(recipient.address.toStdString());
-
-    // Verify data
-    std::map<std::string, std::string> info;
-    CTxOut txout(PROTOCOL_BINDPLOTTER_LOCKAMOUNT, GetScriptForDestination(bindToDest), recipient.payload);
-    auto payload = ExtractTxoutPayload(txout, nTipHeight, {}, true, &info);
-    if (!payload || payload->type != TXOUT_TYPE_BINDPLOTTER) {
-        QMessageBox msgBox(QMessageBox::Critical, tr("Bind plotter"), tr("Bad bind plotter data!"), QMessageBox::Ok, this);
-        msgBox.exec();
-        return;
-    }
-
-    // format
-    QString address;
-    if (recipient.label.length() > 0)
-        address = GUIUtil::HtmlEscape(recipient.label) + "(<span style='font-family: monospace;'>" + recipient.address + "</span>)";
-    else
-        address = "<span style='font-family: monospace;'>" + recipient.address + "</span>";
-    address = "<b>" + address + "</b>";
-    QString plotterId = "<b>" + QString::number(BindPlotterPayload::As(payload)->GetId()) + "</b>";
-
-    QString information;
-    information += tr("%1 bind to %2").arg(plotterId, address) + "<br />";
-    information += tr("Public Key: %1").arg(QString::fromStdString(info["pubkey"])) + "<br />";
-    information += tr("Bind Type: %1").arg(QString::fromStdString(info["type"])) + "<br />";
-    information += "<br />";
-    information += tr("You can copy and send below signature bind data to %1 owner:").arg(address);
-    information += "<hr />";
-    information += "<p>";
-    information += QString::fromStdString(HexStr(recipient.payload.begin(), recipient.payload.end())).insert(144, "<br />").insert(72, "<br />");
-    information += "</p>";
-
-    QMessageBox msgBox(QMessageBox::Information, tr("Bind plotter"), information, QMessageBox::Ok|QMessageBox::Close, this);
-    msgBox.button(QMessageBox::Ok)->setText(tr("Copy bind data"));
-    if (msgBox.exec() == QMessageBox::Ok) {
-        GUIUtil::setClipboard(QString::fromStdString(HexStr(recipient.payload.begin(), recipient.payload.end())));
     }
 }
 
@@ -750,8 +571,7 @@ QWidget *SendCoinsDialog::setupTabChain(QWidget *prev)
         }
     }
     QWidget::setTabOrder(prev, ui->sendButton);
-    QWidget::setTabOrder(ui->sendButton, ui->checkBindDataButton);
-    QWidget::setTabOrder(ui->checkBindDataButton, ui->clearButton);
+    QWidget::setTabOrder(ui->sendButton, ui->clearButton);
     QWidget::setTabOrder(ui->clearButton, ui->addButton);
     return ui->addButton;
 }

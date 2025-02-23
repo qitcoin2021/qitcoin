@@ -100,7 +100,8 @@ TransactionView::TransactionView(const PlatformStyle *platformStyle, QWidget *pa
         TransactionFilterProxy::TYPE(TransactionRecord::SelfPoint));
     typeWidget->addItem(tr("Point received"), TransactionFilterProxy::TYPE(TransactionRecord::PointReceived) |
         TransactionFilterProxy::TYPE(TransactionRecord::SelfPoint));
-    typeWidget->addItem(tr("Staking sent"), TransactionFilterProxy::TYPE(TransactionRecord::StakingSent) |
+    typeWidget->addItem(tr("Staking sent"), TransactionFilterProxy::TYPE(TransactionRecord::StakingPoolInitial) |
+        TransactionFilterProxy::TYPE(TransactionRecord::StakingSent) |
         TransactionFilterProxy::TYPE(TransactionRecord::SelfStaking));
     typeWidget->addItem(tr("Staking received"), TransactionFilterProxy::TYPE(TransactionRecord::StakingReceived) |
         TransactionFilterProxy::TYPE(TransactionRecord::SelfStaking));
