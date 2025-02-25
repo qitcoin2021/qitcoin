@@ -967,7 +967,7 @@ CAccountBalanceList CCoinsViewDB::GetTopStakingAccounts(int n, const CCoinsMap &
 
 void CCoinsViewDB::TrySnapshotStakingPoolStatus(const CBlockIndex *pEpochInitIndex, const Consensus::Params &consensusParams) {
     if (pEpochInitIndex->nHeight%consensusParams.nSaturnEpockBlocks != 0 ||
-        pEpochInitIndex->nHeight + consensusParams.nSaturnEpockBlocks * 2 < consensusParams.nSaturnActiveHeight) {
+        pEpochInitIndex->nHeight + consensusParams.nSaturnEpockBlocks * 30 < consensusParams.nSaturnActiveHeight) {
         return;
     }
 
