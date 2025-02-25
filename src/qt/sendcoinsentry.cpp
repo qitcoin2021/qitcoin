@@ -110,6 +110,7 @@ void SendCoinsEntry::on_reloadStakingPools_clicked()
     if(!model)
         return;
 
+    ui->stakingPoolSelector->clear();
     for (const auto &pool : model->wallet().chain().getStakingPools()) {
         std::string poolAddress = EncodeDestination(ExtractDestination(pool.poolID));
         std::string poolAmount = std::to_string(pool.stakeAmount / COIN);
