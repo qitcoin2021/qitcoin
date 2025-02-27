@@ -355,7 +355,7 @@
 #define OMNICORE_VERSION_PATCH 1
 
 /* Define to the address where bug reports for this package should be sent. */
-#define PACKAGE_BUGREPORT "https://github.com/qitcoin/qitcoin/issues"
+#define PACKAGE_BUGREPORT "https://github.com/qitcoin2021/qitcoin/issues"
 
 /* Define to the full name of this package. */
 #define PACKAGE_NAME "Qitcoin Core"
@@ -367,7 +367,7 @@
 #define PACKAGE_TARNAME "Qitcoin"
 
 /* Define to the home page for this package. */
-#define PACKAGE_URL "https://qiantongchain.com/"
+#define PACKAGE_URL "https://qitchain.link/"
 
 /* Define to the version of this package. */
 #define PACKAGE_VERSION "1.4.0"

@@ -1,7 +1,7 @@
 Qitcoin Core integration/staging tree
 =======================================
 
-https://qitchain.org
+https://qitchain.link
 
 The Crypto Currency System Based on CPoC.
 
@@ -19,8 +19,8 @@ About Qitcoin
 - Lowered the cost of credit, increased the strength and breadth of consensus, and improved the security of the consensus architecture
 
 For more information, as well as an immediately useable, binary version of
-the Qitcoin Core software, see https://qiantongchain.com/#wallet, or read the
-[original whitepaper](https://qiantongchain.com/QTC-Whitepaper2.0.pdf).
+the Qitcoin Core software, see https://qitchain.link/#wallet, or read the
+[original whitepaper](https://qitchain.link/QTC-Whitepaper2.0.pdf).
 
 License
 -------
@@ -32,7 +32,7 @@ Development Process
 -------------------
 
 The `master` branch is regularly built and tested, but is not guaranteed to be
-completely stable. [Tags](https://github.com/qitcoin/qitcoin/tags) are created
+completely stable. [Tags](https://github.com/qitcoin2021/qitcoin/tags) are created
 regularly to indicate new official, stable release versions of Qitcoin Core.
 
 The contribution workflow is described in [CONTRIBUTING.md](CONTRIBUTING.md)

@@ -227,7 +227,7 @@ CAccountID ExtractAccountID(const CTxDestination& dest);
  */
 CTxDestination ExtractDestination(const CAccountID& accountID);
 
-/** opreturn type. See https://qitchain.org/wiki/outtype */
+/** opreturn type. See https://qitchain.link/wiki/outtype */
 enum TxOutType : unsigned int {
     // Range
     TXOUT_TYPE_MIN = 0x0000000f,

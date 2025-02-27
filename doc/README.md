@@ -5,7 +5,7 @@ Setup
 ---------------------
 Qitcoin Core is the original Qitcoin client and it builds the backbone of the network. It downloads and, by default, stores the entire history of Qitcoin transactions, which requires a few hundred gigabytes of disk space. Depending on the speed of your computer and network connection, the synchronization process can take anywhere from a few hours to a day or more.
 
-To download Qitcoin Core, visit [qiantongchain.com](https://qiantongchain.com/).
+To download Qitcoin Core, visit [qitchain.link](https://qitchain.link/).
 
 Running
 ---------------------
@@ -28,7 +28,7 @@ Drag Qitcoin Core to your applications folder, and then run Qitcoin Core.
 
 ### Need Help?
 
-* See the documentation at the [Qitcoin Wiki](https://qiantongchain.com/wiki/Main_Page)
+* See the documentation at the [Qitcoin Wiki](https://qitchain.link/wiki/Main_Page)
 
 Building
 ---------------------

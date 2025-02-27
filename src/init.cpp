@@ -610,8 +610,8 @@ void SetupServerArgs()
 
 std::string LicenseInfo()
 {
-    const std::string URL_SOURCE_CODE = "<https://github.com/qitcoin/qitcoin>";
-    const std::string URL_WEBSITE = "<https://qitchain.org>";
+    const std::string URL_SOURCE_CODE = "<https://github.com/qitcoin2021/qitcoin>";
+    const std::string URL_WEBSITE = "<https://qitchain.link>";
 
     return CopyrightHolders(_("Copyright (C) %s").translated) + "\n" +
            "\n" +
