@@ -208,7 +208,7 @@ bool TransactionRecord::updateTransactionRecord(const interfaces::WalletTx& wtx,
 
         sub.type = TransactionRecord::StakingSent;
         sub.address = EncodeDestination(ScriptHash(StakingPayload::As(payload)->GetReceiverID()));
-        sub.debit += -wtx.tx->vout[nOut].nValue;
+        sub.debit = -wtx.tx->vout[nOut].nValue;
         if (wtx.txout_payload_is_mine[nOut] & ISMINE_ALL)
         {
             if (wtx.txout_is_mine[nOut])
