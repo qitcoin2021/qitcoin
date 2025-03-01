@@ -49,7 +49,7 @@
     <item row="0" column="1">
       <layout class="QHBoxLayout" name="stakingPoolToLayout">
         <property name="spacing">
-        <number>0</number>
+          <number>4</number>
         </property>
         <item>
           <widget class="QComboBox" name="stakingPoolSelector" />

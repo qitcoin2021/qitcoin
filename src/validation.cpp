@@ -4825,6 +4825,14 @@ bool CChainState::RewindBlockIndex(const CChainParams& params)
         }
 
         tip = m_chain.Tip();
+
+        // Rollback to staking pool status pre-scan
+        if (nHeight >= params.GetConsensus().nSaturnActiveHeight - params.GetConsensus().nSaturnEpockBlocks * 10 &&
+            ::ChainstateActive().CoinsTip().GetStakingPools(GetEpochHash(tip, params.GetConsensus())).empty()) {
+            int nNewHeight = params.GetConsensus().nSaturnActiveHeight - params.GetConsensus().nSaturnEpockBlocks * 10;
+            if (nNewHeight < nHeight)
+                nHeight = nNewHeight;
+        }
     }
     // nHeight is now the height of the first insufficiently-validated block, or tipheight + 1
 

@@ -68,6 +68,8 @@ SendCoinsEntry::SendCoinsEntry(PayOperateMethod payOperateMethod, const Platform
     // Pay method
     if (payOperateMethod == PayOperateMethod::Staking) {
         ui->payToLabel->setText(tr("&Owner:"));
+        ui->labellLabel->setVisible(false);
+        ui->addAsLabel->setVisible(false);
         ui->stakingPoolLabel->setVisible(true);
         ui->stakingPoolSelector->setVisible(true);
         ui->reloadStakingPools->setVisible(true);
@@ -124,6 +126,12 @@ void SendCoinsEntry::on_createStakingPool_clicked()
 {
     if(!model)
         return;
+
+    if (!model->validateAddress(ui->payTo->text()))
+    {
+        ui->payTo->setValid(false);
+        return;
+    }
 
     model->createStakingPool(ui->payTo->text());
 }
