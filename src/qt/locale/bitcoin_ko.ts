@@ -2627,6 +2627,14 @@ Note:  Since the fee is calculated on a per-byte basis, a fee of "100 satoshis p
         <source>Enter your plotter passphrase or bind hex data</source>
         <translation>플로터 비밀번호 문구를 입력하거나 16 진수 데이터를 바인딩하십시오</translation>
     </message>
+    <message>
+        <source>&amp;Pools:</source>
+        <translation>풀(&amp;P):</translation>
+    </message>
+    <message>
+        <source>&amp;Owner:</source>
+        <translation>소유자(&amp;O):</translation>
+    </message>
 </context>
 <context>
     <name>SendConfirmationDialog</name>
@@ -3378,6 +3386,30 @@ Note:  Since the fee is calculated on a per-byte basis, a fee of "100 satoshis p
     <message>
         <source>To address:</source>
         <translation>목적지 주소:</translation>
+    </message>
+    <message>
+        <source>Create staking pool error</source>
+        <translation>스테이킹 풀 생성 오류</translation>
+    </message>
+    <message>
+        <source>Could not create transaction</source>
+        <translation>거래를 생성할 수 없습니다.</translation>
+    </message>
+    <message>
+        <source>Create staking pool</source>
+        <translation>스테이킹 풀 생성</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to create staking pool?</source>
+        <translation>스테이킹 풀을 생성하시겠습니까?</translation>
+    </message>
+    <message>
+        <source>Owner address:</source>
+        <translation>소유자 주소:</translation>
+    </message>
+    <message>
+        <source>Lock amount:</source>
+        <translation>잠금 금액:</translation>
     </message>
 </context>
 <context>

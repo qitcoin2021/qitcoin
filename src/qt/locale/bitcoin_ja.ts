@@ -2752,6 +2752,14 @@ Note:  Since the fee is calculated on a per-byte basis, a fee of "100 satoshis p
         <source>Enter your plotter passphrase or bind hex data</source>
         <translation>IDの頭脳パスワードまたはバインドされたデータを入力してください</translation>
     </message>
+    <message>
+        <source>&amp;Pools:</source>
+        <translation>プール(&amp;P):</translation>
+    </message>
+    <message>
+        <source>&amp;Owner:</source>
+        <translation>所有者(&amp;O):</translation>
+    </message>
 </context>
 <context>
     <name>SendConfirmationDialog</name>
@@ -3511,6 +3519,30 @@ Note:  Since the fee is calculated on a per-byte basis, a fee of "100 satoshis p
     <message>
         <source>To address:</source>
         <translation>宛先アドレス: </translation>
+    </message>
+    <message>
+        <source>Create staking pool error</source>
+        <translation>ステーキングプール作成エラー</translation>
+    </message>
+    <message>
+        <source>Could not create transaction</source>
+        <translation>トランザクションを作成できませんでした</translation>
+    </message>
+    <message>
+        <source>Create staking pool</source>
+        <translation>ステーキングプールを作成する</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to create staking pool?</source>
+        <translation>ステーキングプールを作成してもよろしいですか?</translation>
+    </message>
+    <message>
+        <source>Owner address:</source>
+        <translation>所有者住所:</translation>
+    </message>
+    <message>
+        <source>Lock amount:</source>
+        <translation>ロック金額:</translation>
     </message>
 </context>
 <context>

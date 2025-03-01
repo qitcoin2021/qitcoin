@@ -2775,6 +2775,14 @@ Note:  Since the fee is calculated on a per-byte basis, a fee of "100 satoshis p
         <source>Enter your plotter passphrase or bind hex data</source>
         <translation>请输入您算力的脑密码或绑定的数据</translation>
     </message>
+    <message>
+        <source>&amp;Pools:</source>
+        <translation>池(&amp;P):</translation>
+    </message>
+    <message>
+        <source>&amp;Owner:</source>
+        <translation>所有者(&amp;O):</translation>
+    </message>
 </context>
 <context>
     <name>SendConfirmationDialog</name>
@@ -3614,6 +3622,30 @@ Note:  Since the fee is calculated on a per-byte basis, a fee of "100 satoshis p
     <message>
         <source>To address:</source>
         <translation>目的地址：</translation>
+    </message>
+    <message>
+        <source>Create staking pool error</source>
+        <translation>创建池错误</translation>
+    </message>
+    <message>
+        <source>Could not create transaction</source>
+        <translation>无法创建池</translation>
+    </message>
+    <message>
+        <source>Create staking pool</source>
+        <translation>创建池</translation>
+    </message>
+    <message>
+        <source>Are you sure you want to create staking pool?</source>
+        <translation>你确定要创建池吗？</translation>
+    </message>
+    <message>
+        <source>Owner address:</source>
+        <translation>所有者地址：</translation>
+    </message>
+    <message>
+        <source>Lock amount:</source>
+        <translation>锁定总额：</translation>
     </message>
 </context>
 <context>
