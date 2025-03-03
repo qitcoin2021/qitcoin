@@ -207,6 +207,8 @@ void GenearetePoolsDeadlineThread()
             break;
 
         LOCK(cs_main);
+        if (::ChainstateActive().IsInitialBlockDownload())
+            continue;
         auto const &params = Params().GetConsensus();
         CBlockIndex *pindexTip = ::ChainActive().Tip();
         if (pindexTip->nHeight + 1 < params.nSaturnActiveHeight || pindexTip->GetBlockHash() == preProcessBlockHash)
