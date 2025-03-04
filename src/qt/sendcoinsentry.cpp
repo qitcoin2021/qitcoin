@@ -38,6 +38,7 @@ SendCoinsEntry::SendCoinsEntry(PayOperateMethod payOperateMethod, const Platform
     ui->stakingPoolSelector->setVisible(false);
     ui->reloadStakingPools->setVisible(false);
     ui->createStakingPool->setVisible(false);
+    ui->withdrawStakingButton->setVisible(false);
 
     ui->addressBookButton->setIcon(platformStyle->SingleColorIcon(":/icons/address-book"));
     ui->pasteButton->setIcon(platformStyle->SingleColorIcon(":/icons/editpaste"));
@@ -74,6 +75,7 @@ SendCoinsEntry::SendCoinsEntry(PayOperateMethod payOperateMethod, const Platform
         ui->stakingPoolSelector->setVisible(true);
         ui->reloadStakingPools->setVisible(true);
         ui->createStakingPool->setVisible(true);
+        ui->withdrawStakingButton->setVisible(true);
     }
 }
 
@@ -133,7 +135,27 @@ void SendCoinsEntry::on_createStakingPool_clicked()
         return;
     }
 
-    model->createStakingPool(ui->payTo->text());
+    model->createStakingPool(ui->payTo->text().toStdString());
+}
+
+void SendCoinsEntry::on_withdrawStakingButton_clicked()
+{
+    if(!model)
+        return;
+
+    QString poolAddress = getCurrentPoolAddress();
+    if (!model->validateAddress(poolAddress))
+    {
+        return;
+    }
+
+    if (!model->validateAddress(ui->payTo->text()))
+    {
+        ui->payTo->setValid(false);
+        return;
+    }
+
+    model->withdrawStakingPending(poolAddress.toStdString(), ui->payTo->text().toStdString());
 }
 
 void SendCoinsEntry::setModel(WalletModel *_model)
@@ -254,13 +276,18 @@ SendCoinsRecipient SendCoinsEntry::getValue()
     recipient.message = ui->messageTextLabel->text();
     recipient.fSubtractFeeFromAmount = (ui->checkboxSubtractFeeFromAmount->checkState() == Qt::Checked);
     if (payOperateMethod == PayOperateMethod::Staking) {
-        QString poolAddress = ui->stakingPoolSelector->currentText().split(" ")[0];
+        QString poolAddress = getCurrentPoolAddress();
         recipient.payload = GetStakingScriptForDestination(DecodeDestination(poolAddress.toStdString()), PROTOCOL_STAKING_LOCK_BLOCKS_FULL_AMOUNT);
         recipient.address = recipient.address;
         recipient.label = "";
     }
 
     return recipient;
+}
+
+QString SendCoinsEntry::getCurrentPoolAddress()
+{
+    return ui->stakingPoolSelector->currentText().split(" ")[0];
 }
 
 QWidget *SendCoinsEntry::setupTabChain(QWidget *prev)
