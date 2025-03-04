@@ -272,33 +272,39 @@ Result CreateUnfreezeTransaction(CWallet* wallet, const COutPoint& outpoint,
     // Check limit
     if (coin.IsBindPlotter()) {
         int nSpendHeight = locked_chain->getHeight().get_value_or(0) + 1;
-        int nActiveHeight = wallet->chain().getUnbindPlotterLimitHeight(CBindPlotterInfo(targetOutpoint, coin));
-        if (nSpendHeight < nActiveHeight) {
-            errors.push_back(strprintf("Unbind plotter active on %d block height (%d blocks after, about %d minute)",
-                    nActiveHeight,
-                    nActiveHeight - nSpendHeight,
-                    (nActiveHeight - nSpendHeight) * Params().GetConsensus().nPowTargetSpacing / 60));
-            return Result::WALLET_ERROR;
+        if (nSpendHeight < Params().GetConsensus().nSaturnActiveHeight) {
+            int nActiveHeight = wallet->chain().getUnbindPlotterLimitHeight(CBindPlotterInfo(targetOutpoint, coin));
+            if (nSpendHeight < nActiveHeight) {
+                errors.push_back(strprintf("Unbind plotter active on %d block height (%d blocks after, about %d minute)",
+                        nActiveHeight,
+                        nActiveHeight - nSpendHeight,
+                        (nActiveHeight - nSpendHeight) * Params().GetConsensus().nPowTargetSpacing / 60));
+                return Result::WALLET_ERROR;
+            }
         }
     } else if (coin.IsPoint()) {
         int nSpendHeight = locked_chain->getHeight().get_value_or(0) + 1;
-        int nActiveHeight = coin.nHeight + PointPayload::As(coin.payload)->GetLockBlocks();
-        if (nSpendHeight < nActiveHeight) {
-            errors.push_back(strprintf("Withdraw point active on %d block height (%d blocks after, about %d minute)",
-                    nActiveHeight,
-                    nActiveHeight - nSpendHeight,
-                    (nActiveHeight - nSpendHeight) * Params().GetConsensus().nPowTargetSpacing / 60));
-            return Result::WALLET_ERROR;
+        if (nSpendHeight < Params().GetConsensus().nSaturnActiveHeight) {
+            int nActiveHeight = coin.nHeight + PointPayload::As(coin.payload)->GetLockBlocks();
+            if (nSpendHeight < nActiveHeight) {
+                errors.push_back(strprintf("Withdraw point active on %d block height (%d blocks after, about %d minute)",
+                        nActiveHeight,
+                        nActiveHeight - nSpendHeight,
+                        (nActiveHeight - nSpendHeight) * Params().GetConsensus().nPowTargetSpacing / 60));
+                return Result::WALLET_ERROR;
+            }
         }
     } else if (coin.IsStaking()) {
         int nSpendHeight = locked_chain->getHeight().get_value_or(0) + 1;
-        int nActiveHeight = coin.nHeight + StakingPayload::As(coin.payload)->GetLockBlocks();
-        if (nSpendHeight < nActiveHeight) {
-            errors.push_back(strprintf("Withdraw staking active on %d block height (%d blocks after, about %d minute)",
-                    nActiveHeight,
-                    nActiveHeight - nSpendHeight,
-                    (nActiveHeight - nSpendHeight) * Params().GetConsensus().nPowTargetSpacing / 60));
-            return Result::WALLET_ERROR;
+        if (nSpendHeight < Params().GetConsensus().nSaturnActiveHeight || coin.nHeight > Params().GetConsensus().nSaturnActiveHeight) {
+            int nActiveHeight = coin.nHeight + StakingPayload::As(coin.payload)->GetLockBlocks();
+            if (nSpendHeight < nActiveHeight) {
+                errors.push_back(strprintf("Withdraw staking active on %d block height (%d blocks after, about %d minute)",
+                        nActiveHeight,
+                        nActiveHeight - nSpendHeight,
+                        (nActiveHeight - nSpendHeight) * Params().GetConsensus().nPowTargetSpacing / 60));
+                return Result::WALLET_ERROR;
+            }
         }
     } else {
         errors.push_back("Can't unfreeze");
