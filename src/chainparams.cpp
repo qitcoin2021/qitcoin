@@ -100,6 +100,7 @@ public:
         consensus.nMercuryPosFilterBits = 9;
 
         consensus.nSaturnActiveHeight = 654201;
+        consensus.nSaturnLimitMaxDiffActiveHeight = consensus.nSaturnActiveHeight + 400;
         consensus.SaturnStakingGenesisID = uint160({ 0x0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }); // P2SH: 334L4RPCoYrrzLZ57xMEz64xgtVEyHNMAX
         consensus.nSaturnEpockBlocks = 100;
         assert(consensus.nSaturnActiveHeight % consensus.nSaturnEpockBlocks == 1);
@@ -180,6 +181,8 @@ public:
                 {  150000, uint256S("0x48ee96ffef3db8902ba1c8e08263b8c826aa6cd42749d2293bd6e85f1dbd62fb") },
                 {  160000, uint256S("0x70dd8449d638fb494b5a90ac55ed939a4bfd13106df677b60aabda4a7c73baf0") },
                 {  170000, uint256S("0xf6963688821c1bed7d09214b987032b26640a9c4c7cf7de484f3f8cb977c7028") }, // fork
+                {  654200, uint256S("0x9b36beed8a870e623b94da5fb9ae277104f2e5e6c713699f594d73651d2e112f") },
+                {  654201, uint256S("0xda056a44bf944377e0c4e7c1f87d01cb4857138e05cfe14212e9e2672e52d6a7") },
             }
         };
 
@@ -231,6 +234,7 @@ public:
         consensus.nMercuryPosFilterBits = 6;
 
         consensus.nSaturnActiveHeight = 101;
+        consensus.nSaturnLimitMaxDiffActiveHeight = consensus.nSaturnActiveHeight;
         consensus.SaturnStakingGenesisID = uint160({ 0x0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }); // P2SH: 2MtcY8AKER1NDC8Bco5y7c34DuEhQkqToXy
         consensus.nSaturnEpockBlocks = 100;
         assert(consensus.nSaturnActiveHeight % consensus.nSaturnEpockBlocks == 1);
@@ -338,6 +342,7 @@ public:
         consensus.nMercuryPosFilterBits = 0;
 
         consensus.nSaturnActiveHeight = 21;
+        consensus.nSaturnLimitMaxDiffActiveHeight = consensus.nSaturnActiveHeight;
         consensus.SaturnStakingGenesisID = uint160({ 0x0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }); // P2SH: 2MtcY8AKER1NDC8Bco5y7c34DuEhQkqToXy
         consensus.nSaturnEpockBlocks = 10;
         assert(consensus.nSaturnActiveHeight % consensus.nSaturnEpockBlocks == 1);

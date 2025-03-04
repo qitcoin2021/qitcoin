@@ -407,6 +407,11 @@ uint64_t CalculateBaseTarget(const CBlockIndex& prevBlockIndex, const CBlockHead
         // genesis block & pre-mining block & const block
         return INITIAL_BASE_TARGET;
     } else {
+        int64_t maxBaseTarget = INITIAL_BASE_TARGET;
+        if (nHeight >= params.nSaturnLimitMaxDiffActiveHeight) {
+            maxBaseTarget = INITIAL_BASE_TARGET * params.nPowTargetSpacing;
+        }
+
         // Algorithm:
         //   B(0) = prevBlock, B(1) = B(0).prev, ..., B(n) = B(n-1).prev
         //   Y(0) = B(0).nBaseTarget
@@ -427,8 +432,8 @@ uint64_t CalculateBaseTarget(const CBlockIndex& prevBlockIndex, const CBlockHead
         }
         uint64_t curBaseTarget = prevBlockIndex.nBaseTarget;
         uint64_t newBaseTarget = avgBaseTarget * diffTime / targetTimespan;
-        if (newBaseTarget > INITIAL_BASE_TARGET) {
-            newBaseTarget = INITIAL_BASE_TARGET;
+        if (newBaseTarget > maxBaseTarget) {
+            newBaseTarget = maxBaseTarget;
         }
         if (newBaseTarget == 0) {
             newBaseTarget = 1;
