@@ -35,7 +35,7 @@ static const arith_uint256 TWO64 = arith_uint256(std::numeric_limits<uint64_t>::
 /**
  * QTC base target when target spacing is 1 seconds
  * 
- * See https://qitchain.link/wiki/The_Proof_of_Capacity#Base_Target
+ * See https://qitchain.net/wiki/The_Proof_of_Capacity#Base_Target
  *
  * net capacity(t) = 4398046511104 / t / baseTarget(t)
  *
@@ -211,7 +211,7 @@ CTxDestination AddMiningSignaturePrivkey(const CKey& key);
  */
 std::vector<CTxDestination> GetMiningSignatureAddresses();
 
-/** Utility functions for original PoC legacy. See https://qitchain.link/wiki/poc */
+/** Utility functions for original PoC legacy. See https://qitchain.net/wiki/poc */
 uint64_t GeneratePlotterId(const std::string &passphrase);
 uint64_t ToPlotterId(const unsigned char publicKey[32]);
 
