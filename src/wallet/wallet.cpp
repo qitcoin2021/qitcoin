@@ -2473,6 +2473,13 @@ CAmount CWalletTx::GetCredit(interfaces::Chain::Lock& locked_chain, const ismine
     if (IsImmatureCoinBase(locked_chain))
         return 0;
 
+    // Check if the transaction is invalid frozen
+    if ((filter & ISMINE_FROZEN) &&
+        m_confirm.status != CWalletTx::UNCONFIRMED &&
+        m_confirm.status != CWalletTx::CONFIRMED) {
+        return 0;
+    }
+
     CAmount credit = 0;
     if (filter & ISMINE_SPENDABLE) {
         // GetBalance can assume transactions in mapWallet won't change

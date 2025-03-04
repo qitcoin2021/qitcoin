@@ -463,6 +463,10 @@ QString TransactionTableModel::formatTxToAddress(const TransactionRecord *wtx, b
     case TransactionRecord::PointReceived:
     case TransactionRecord::SelfPoint:
     case TransactionRecord::WithdrawPoint:
+    case TransactionRecord::StakingSent:
+    case TransactionRecord::StakingReceived:
+    case TransactionRecord::SelfStaking:
+    case TransactionRecord::WithdrawStaking:
         return lookupAddress(wtx->address, tooltip) + watchAddress + comment;
     case TransactionRecord::SendToOther:
         return QString::fromStdString(wtx->address) + watchAddress + comment;
@@ -491,10 +495,6 @@ QVariant TransactionTableModel::addressColor(const TransactionRecord *wtx) const
             return COLOR_TX_STATUS_DISABLED;
         else
             return COLOR_BLACK;
-    case TransactionRecord::PointSent:
-    case TransactionRecord::PointReceived:
-    case TransactionRecord::SelfPoint:
-        return COLOR_BLACK;
     default:
         break;
     }
@@ -725,6 +725,10 @@ QVariant TransactionTableModel::data(const QModelIndex &index, int role) const
             else if (rec->type == TransactionRecord::PointSent || rec->type == TransactionRecord::PointReceived || rec->type == TransactionRecord::SelfPoint)
             {
                 return tr("Withdraw point");
+            }
+            else if (rec->type == TransactionRecord::StakingSent || rec->type == TransactionRecord::StakingReceived || rec->type == TransactionRecord::SelfStaking)
+            {
+                return tr("Withdraw staking");
             }
         }
         return rec->status.countsForBalance;
