@@ -138,7 +138,7 @@ static UniValue getrawtransaction(const JSONRPCRequest& request)
             "     ,...\n"
             "  ],\n"
             "  \"extra\": {                       (json object) Only exist for bind plotter and point\n"
-            "    \"type\": \"pledge|bindplotter\",  (string) Extra data type\n"
+            "    \"type\": \"staking\",          (string) Extra data type\n"
             "    \"amount\": xxx,                 (numeric) The value in special tx\n"
             "    \"address\": \"xxxx\",             (string) Bind address. Only exist for bind plotter\n"
             "    \"id\": \"plotterID\",             (string) Bind plotter ID. Only exist for bind plotter\n"
