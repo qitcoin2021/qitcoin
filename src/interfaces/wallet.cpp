@@ -10,6 +10,7 @@
 #include <interfaces/chain.h>
 #include <interfaces/handler.h>
 #include <key_io.h>
+#include <node/transaction.h>
 #include <policy/feerate.h>
 #include <policy/fees.h>
 #include <primitives/transaction.h>
@@ -385,8 +386,18 @@ public:
         }
 
         // commit
-        return uniformer::CommitTransaction(m_wallet.get(), std::move(mtx), mapValue_t{}, errors) ==
-               uniformer::Result::OK;
+        //return uniformer::CommitTransaction(m_wallet.get(), std::move(mtx), mapValue_t{}, errors) ==
+        //       uniformer::Result::OK;
+        // Commit transaction
+        CTransactionRef tx(MakeTransactionRef(std::move(mtx)));
+        std::string err_string;
+        AssertLockNotHeld(cs_main);
+        const TransactionError err = BroadcastTransaction(tx, err_string, COIN / 10, true, true);
+        if (TransactionError::OK != err) {
+            errors.push_back(err_string);
+            return false;
+        }
+        return true;
     }
     CTransactionRef getTx(const uint256& txid) override
     {
