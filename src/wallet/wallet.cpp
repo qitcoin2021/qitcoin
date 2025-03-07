@@ -3295,7 +3295,12 @@ bool CWallet::CreateTransaction(interfaces::Chain::Lock& locked_chain, const std
             if (!boost::get<CNoDestination>(&coin_control.destChange)) {
                 scriptChange = GetScriptForDestination(coin_control.destChange);
             } else { // no coin control: send change to primary address
-                scriptChange = GetScriptForDestination(GetPrimaryDestination());
+                CTxDestination primaryDest = GetPrimaryDestination();
+                if (!boost::get<ScriptHash>(primaryDest)) {
+                    strFailReason = _("Invalid primary destination address").translated;
+                    return false;
+                }
+                scriptChange = GetScriptForDestination(primaryDest);
             }
             CTxOut change_prototype_txout(0, scriptChange);
             coin_selection_params.change_output_size = GetSerializeSize(change_prototype_txout);
@@ -3659,6 +3664,8 @@ bool CWallet::CommitTransaction(CTransactionRef tx, mapValue_t mapValue, std::ve
             // Notify that old coins are spent
             for (const CTxIn& txin : wtxNew.tx->vin)
             {
+                if (!mapWallet.count(txin.prevout.hash))
+                    continue;
                 CWalletTx &coin = mapWallet.at(txin.prevout.hash);
                 coin.BindWallet(this);
                 NotifyTransactionChanged(this, coin.GetHash(), CT_UPDATED);
@@ -3932,6 +3939,19 @@ bool CWallet::TopUpKeyPool(unsigned int kpSize)
             WalletLogPrintf("keypool added %d keys (%d internal), size=%u (%u internal)\n", missingInternal + missingExternal, missingInternal, setInternalKeyPool.size() + setExternalKeyPool.size(), setInternalKeyPool.size());
         }
     }
+
+    // set primary destination if it is invalid
+    if (!boost::get<ScriptHash>(GetPrimaryDestination())) {
+        CTxDestination newPrimaryDest;
+        {
+            LOCK(cs_wallet);
+            if (!mapAddressBook.empty())
+            newPrimaryDest = mapAddressBook.cbegin()->first;
+        }
+        if (boost::get<ScriptHash>(newPrimaryDest))
+            SetPrimaryDestination(newPrimaryDest);
+    }
+
     NotifyCanGetAddressesChanged();
     return true;
 }

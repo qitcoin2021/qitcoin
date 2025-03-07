@@ -5215,15 +5215,12 @@ static UniValue createinitialstakingpooltx(const JSONRPCRequest& request)
 
     // Commit transaction
     if (fCommitTransaction) {
-        CTransactionRef tx(MakeTransactionRef(std::move(mtx)));
-        std::string err_string;
-        AssertLockNotHeld(cs_main);
-        const TransactionError err = BroadcastTransaction(tx, err_string, COIN / 10, true, true);
-        if (TransactionError::OK != err) {
-            ret.pushKV("commit_result", err_string);
-        } else {
-            ret.pushKV("commit_result", "success");
+        errors.clear();
+        result = uniformer::CommitTransaction(pwallet, std::move(mtx), mapValue_t{}, errors);
+        if (result != uniformer::Result::OK) {
+            throw JSONRPCError(RPC_WALLET_ERROR, strprintf("Commit transaction error(%d): %s", (uint32_t)result, errors.empty() ? "Unknown" : errors[0]));
         }
+        ret.pushKV("commit_result", "success");
     }
 
     return ret;
@@ -5285,16 +5282,15 @@ static UniValue withdrawpending(const JSONRPCRequest& request)
     if (!uniformer::SignTransaction(pwallet, mtx)) {
         throw JSONRPCError(RPC_WALLET_ERROR, "Sign transaction error");
     }
+    uint256 txHash = mtx.GetHash();
 
     // Commit transaction
-    CTransactionRef tx(MakeTransactionRef(std::move(mtx)));
-    std::string err_string;
-    AssertLockNotHeld(cs_main);
-    const TransactionError err = BroadcastTransaction(tx, err_string, COIN / 10, true, true);
-    if (TransactionError::OK != err) {
-        throw JSONRPCTransactionError(err, err_string);
+    errors.clear();
+    result = uniformer::CommitTransaction(pwallet, std::move(mtx), mapValue_t{}, errors);
+    if (result != uniformer::Result::OK) {
+        throw JSONRPCError(RPC_WALLET_ERROR, strprintf("Commit transaction error(%d): %s", (uint32_t)result, errors.empty() ? "Unknown" : errors[0]));
     }
-    return tx->GetHash().GetHex();
+    return txHash.GetHex();
 }
 
 UniValue abortrescan(const JSONRPCRequest& request); // in rpcdump.cpp

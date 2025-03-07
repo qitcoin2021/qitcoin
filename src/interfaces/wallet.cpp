@@ -375,7 +375,7 @@ public:
     {
         CCoinControl coin_control;
         return uniformer::CreateWithdrawPendingTransaction(m_wallet.get(), poolOwnerDest, userDest, coin_control, errors, total, total_fee, mtx) ==
-            uniformer::Result::OK;
+               uniformer::Result::OK;
     }
     bool signAndCommitWithdrawPendingTransaction(CMutableTransaction&& mtx, std::vector<std::string>& errors) override
     {
@@ -386,18 +386,8 @@ public:
         }
 
         // commit
-        //return uniformer::CommitTransaction(m_wallet.get(), std::move(mtx), mapValue_t{}, errors) ==
-        //       uniformer::Result::OK;
-        // Commit transaction
-        CTransactionRef tx(MakeTransactionRef(std::move(mtx)));
-        std::string err_string;
-        AssertLockNotHeld(cs_main);
-        const TransactionError err = BroadcastTransaction(tx, err_string, COIN / 10, true, true);
-        if (TransactionError::OK != err) {
-            errors.push_back(err_string);
-            return false;
-        }
-        return true;
+        return uniformer::CommitTransaction(m_wallet.get(), std::move(mtx), mapValue_t{}, errors) ==
+               uniformer::Result::OK;
     }
     CTransactionRef getTx(const uint256& txid) override
     {
