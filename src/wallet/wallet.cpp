@@ -3296,7 +3296,7 @@ bool CWallet::CreateTransaction(interfaces::Chain::Lock& locked_chain, const std
                 scriptChange = GetScriptForDestination(coin_control.destChange);
             } else { // no coin control: send change to primary address
                 CTxDestination primaryDest = GetPrimaryDestination();
-                if (!boost::get<ScriptHash>(primaryDest)) {
+                if (!IsValidDestination(primaryDest)) {
                     strFailReason = _("Invalid primary destination address").translated;
                     return false;
                 }
@@ -3941,14 +3941,14 @@ bool CWallet::TopUpKeyPool(unsigned int kpSize)
     }
 
     // set primary destination if it is invalid
-    if (!boost::get<ScriptHash>(GetPrimaryDestination())) {
+    if (!IsValidDestination(GetPrimaryDestination())) {
         CTxDestination newPrimaryDest;
         {
             LOCK(cs_wallet);
             if (!mapAddressBook.empty())
             newPrimaryDest = mapAddressBook.cbegin()->first;
         }
-        if (boost::get<ScriptHash>(newPrimaryDest))
+        if (IsValidDestination(newPrimaryDest))
             SetPrimaryDestination(newPrimaryDest);
     }
 
@@ -4797,7 +4797,7 @@ std::shared_ptr<CWallet> CWallet::CreateWalletFromFile(interfaces::Chain& chain,
 
     // Check and set primary address
     CTxDestination primaryDest = walletInstance->GetPrimaryDestination();
-    if (!boost::get<ScriptHash>(&primaryDest)) {
+    if (!IsValidDestination(primaryDest)) {
         // Generate new address
         LOCK(walletInstance->cs_wallet);
         CPubKey pubkey;
@@ -4805,7 +4805,7 @@ std::shared_ptr<CWallet> CWallet::CreateWalletFromFile(interfaces::Chain& chain,
             walletInstance->LearnRelatedScripts(pubkey, walletInstance->m_default_address_type);
             primaryDest = GetDestinationForKey(pubkey, walletInstance->m_default_address_type);
         }
-        if (boost::get<ScriptHash>(&primaryDest)) {
+        if (IsValidDestination(primaryDest)) {
             bool fSuccess = walletInstance->SetPrimaryDestination(primaryDest);
             assert(fSuccess);
         }
