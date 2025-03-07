@@ -1463,6 +1463,37 @@ bool CWallet::AbandonTransaction(interfaces::Chain::Lock& locked_chain, const ui
     return true;
 }
 
+bool CWallet::TransactionCanBeRemoved(const uint256& hashTx) const
+{
+    auto locked_chain = chain().lock();
+    LOCK(cs_wallet);
+    const CWalletTx* wtx = GetWalletTx(hashTx);
+    return wtx && wtx->GetDepthInMainChain(*locked_chain) == 0 && !wtx->InMempool();
+}
+
+bool CWallet::RemoveTransaction(interfaces::Chain::Lock& locked_chain, const uint256& hashTx)
+{
+    // try abandon
+    AbandonTransaction(locked_chain, hashTx);
+
+    // remove from wallet
+    {
+        auto locked_chain = chain().lock();
+        LOCK(cs_wallet);
+
+        std::vector<uint256> vHashIn, vHashOut;
+        vHashIn.push_back(hashTx);
+
+        if (ZapSelectTx(vHashIn, vHashOut) != DBErrors::LOAD_OK) {
+            return false;
+        }
+        if(vHashOut.empty()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void CWallet::MarkConflicted(const uint256& hashBlock, const uint256& hashTx)
 {
     auto locked_chain = chain().lock();

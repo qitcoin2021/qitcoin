@@ -290,6 +290,13 @@ public:
         LOCK(m_wallet->cs_wallet);
         return m_wallet->AbandonTransaction(*locked_chain, txid);
     }
+    bool transactionCanBeRemoved(const uint256& txid) const override { return m_wallet->TransactionCanBeRemoved(txid); }
+    bool removeTransaction(const uint256& txid) override
+    {
+        auto locked_chain = m_wallet->chain().lock();
+        LOCK(m_wallet->cs_wallet);
+        return m_wallet->RemoveTransaction(*locked_chain, txid);
+    }
     bool transactionCanBeBumped(const uint256& txid) const override
     {
         return feebumper::TransactionCanBeBumped(m_wallet.get(), txid);

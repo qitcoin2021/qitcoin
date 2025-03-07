@@ -37,7 +37,7 @@
 
 TransactionView::TransactionView(const PlatformStyle *platformStyle, QWidget *parent) :
     QWidget(parent), model(nullptr), transactionProxyModel(nullptr),
-    transactionView(nullptr), abandonAction(nullptr), bumpFeeAction(nullptr), unfreezeAction(nullptr), columnResizingFixer(nullptr)
+    transactionView(nullptr), abandonAction(nullptr), removeAction(nullptr), bumpFeeAction(nullptr), unfreezeAction(nullptr), columnResizingFixer(nullptr)
 {
     // Build filter row
     setContentsMargins(0,0,0,0);
@@ -169,6 +169,7 @@ TransactionView::TransactionView(const PlatformStyle *platformStyle, QWidget *pa
 
     // Actions
     abandonAction = new QAction(tr("Abandon transaction"), this);
+    removeAction = new QAction(tr("Remove transaction"), this);
     bumpFeeAction = new QAction(tr("Increase transaction fee"), this);
     bumpFeeAction->setObjectName("bumpFeeAction");
     unfreezeAction = new QAction(tr("Withdraw/Unbind"), this);
@@ -194,6 +195,7 @@ TransactionView::TransactionView(const PlatformStyle *platformStyle, QWidget *pa
     contextMenu->addSeparator();
     contextMenu->addAction(bumpFeeAction);
     contextMenu->addAction(abandonAction);
+    contextMenu->addAction(removeAction);
     contextMenu->addAction(unfreezeAction);
     contextMenu->addAction(editLabelAction);
 
@@ -210,6 +212,7 @@ TransactionView::TransactionView(const PlatformStyle *platformStyle, QWidget *pa
 
     connect(bumpFeeAction, &QAction::triggered, this, &TransactionView::bumpFee);
     connect(abandonAction, &QAction::triggered, this, &TransactionView::abandonTx);
+    connect(removeAction, &QAction::triggered, this, &TransactionView::removeTx);
     connect(unfreezeAction, &QAction::triggered, this, &TransactionView::unfreezeTx);
     connect(copyAddressAction, &QAction::triggered, this, &TransactionView::copyAddress);
     connect(copyLabelAction, &QAction::triggered, this, &TransactionView::copyLabel);
@@ -417,6 +420,7 @@ void TransactionView::contextualMenu(const QPoint &point)
     uint256 hash;
     hash.SetHex(selection.at(0).data(TransactionTableModel::TxHashRole).toString().toStdString());
     abandonAction->setEnabled(model->wallet().transactionCanBeAbandoned(hash));
+    removeAction->setEnabled(model->wallet().transactionCanBeRemoved(hash));
     bumpFeeAction->setEnabled(model->wallet().transactionCanBeBumped(hash));
     unfreezeAction->setEnabled(model->wallet().coinCanBeUnfreeze(COutPoint(hash, COutPoint::NULL_INDEX)));
 
@@ -442,6 +446,24 @@ void TransactionView::abandonTx()
 
     // Update the table
     model->getTransactionTableModel()->updateTransaction(hashQStr, CT_UPDATED, false);
+}
+
+void TransactionView::removeTx()
+{
+    if(!transactionView || !transactionView->selectionModel())
+        return;
+    QModelIndexList selection = transactionView->selectionModel()->selectedRows(0);
+
+    // get the hash from the TxHashRole (QVariant / QString)
+    uint256 hash;
+    QString hashQStr = selection.at(0).data(TransactionTableModel::TxHashRole).toString();
+    hash.SetHex(hashQStr.toStdString());
+
+    // Remove the wallet transaction over the walletModel
+    model->wallet().removeTransaction(hash);
+
+    // Update the table
+    model->getTransactionTableModel()->updateTransaction(hashQStr, CT_DELETED, false);
 }
 
 void TransactionView::bumpFee()

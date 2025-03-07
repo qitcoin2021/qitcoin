@@ -181,6 +181,12 @@ public:
     //! Abandon transaction.
     virtual bool abandonTransaction(const uint256& txid) = 0;
 
+    //! Return whether transaction can be removed.
+    virtual bool transactionCanBeRemoved(const uint256& txid) const = 0;
+
+    //! Remove transaction.
+    virtual bool removeTransaction(const uint256& txid) = 0;
+
     //! Return whether transaction can be bumped.
     virtual bool transactionCanBeBumped(const uint256& txid) const = 0;
 

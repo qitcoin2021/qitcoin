@@ -3268,6 +3268,10 @@ Note:  Since the fee is calculated on a per-byte basis, a fee of "100 satoshis p
         <translation>中止交易</translation>
     </message>
     <message>
+        <source>Remove transaction</source>
+        <translation>删除交易</translation>
+    </message>
+    <message>
         <source>Increase transaction fee</source>
         <translation>提高手續費</translation>
     </message>

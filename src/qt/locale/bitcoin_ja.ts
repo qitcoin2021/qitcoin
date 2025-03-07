@@ -3301,6 +3301,10 @@ Note:  Since the fee is calculated on a per-byte basis, a fee of "100 satoshis p
         <translation>取引の送信を中止</translation>
     </message>
     <message>
+        <source>Remove transaction</source>
+        <translation>取引の削除</translation>
+    </message>
+    <message>
         <source>Increase transaction fee</source>
         <translation>取引手数料を上乗せ</translation>
     </message>
