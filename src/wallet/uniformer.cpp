@@ -249,13 +249,13 @@ Result CreateWithdrawPendingTransaction(CWallet* wallet, const CTxDestination &p
     const COutPoint withdrawableEntry = CreateStakePendingCoinOutPoint(locked_chain->getCurrentEpochHash(), poolID, userID);
     const Coin &coin = wallet->chain().accessCoin(withdrawableEntry);
     if (coin.IsSpent()) {
-        errors.push_back(strprintf("Not found coin: %s", withdrawableEntry.ToString()));
+        errors.push_back("No coin available for withdrawal found. The coin may have been withdrawn or is less than 10 QTC");
         return Result::INVALID_REQUEST;
     }
 
     // Check epoch edge
     int nHeight = locked_chain->getHeight().get_value_or(0);
-    if (nHeight % Params().GetConsensus().nSaturnEpockBlocks != ((nHeight + 1) % Params().GetConsensus().nSaturnEpockBlocks)) {
+    if (nHeight / Params().GetConsensus().nSaturnEpockBlocks != ((nHeight + 1) / Params().GetConsensus().nSaturnEpockBlocks)) {
         errors.push_back(strprintf("Please wait for the next epoch to withdraw: remain %d blocks", 1));
         return Result::INVALID_REQUEST;
     }
