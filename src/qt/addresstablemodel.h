@@ -25,12 +25,13 @@ class AddressTableModel : public QAbstractTableModel
     Q_OBJECT
 
 public:
-    explicit AddressTableModel(WalletModel *parent = nullptr);
+    explicit AddressTableModel(WalletModel *parent = nullptr, bool fForStakingPool = false);
     ~AddressTableModel();
 
     enum ColumnIndex {
         Label = 0,   /**< User specified label */
-        Address = 1  /**< Bitcoin address */
+        Address = 1, /**< Bitcoin address */
+        Amount = 2   /**< Amount of coins */
     };
 
     enum RoleIndex {

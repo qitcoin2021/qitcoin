@@ -85,6 +85,7 @@ AddressBookPage::AddressBookPage(const PlatformStyle *platformStyle, Mode _mode,
         {
         case SendingTab: setWindowTitle(tr("Choose the address to send coins to")); break;
         case ReceivingTab: setWindowTitle(tr("Choose the address to receive coins with")); break;
+        case StakingPoolTab: setWindowTitle(tr("Choose the staking pool")); break;
         }
         connect(ui->tableView, &QTableView::doubleClicked, this, &QDialog::accept);
         ui->tableView->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -97,6 +98,7 @@ AddressBookPage::AddressBookPage(const PlatformStyle *platformStyle, Mode _mode,
         {
         case SendingTab: setWindowTitle(tr("Sending addresses")); break;
         case ReceivingTab: setWindowTitle(tr("Receiving addresses")); break;
+        case StakingPoolTab: setWindowTitle(tr("Staking pools")); break;
         }
         break;
     }
@@ -109,6 +111,11 @@ AddressBookPage::AddressBookPage(const PlatformStyle *platformStyle, Mode _mode,
         break;
     case ReceivingTab:
         ui->labelExplanation->setText(tr("These are your Qitcoin addresses for receiving payments. Use the 'Create new receiving address' button in the receive tab to create new addresses."));
+        ui->deleteAddress->setVisible(false);
+        ui->newAddress->setVisible(false);
+        break;
+    case StakingPoolTab: 
+        ui->labelExplanation->setText(tr("All staking pools."));
         ui->deleteAddress->setVisible(false);
         ui->newAddress->setVisible(false);
         break;
@@ -168,6 +175,11 @@ void AddressBookPage::setModel(AddressTableModel *_model)
     // Set column widths
     ui->tableView->horizontalHeader()->setSectionResizeMode(AddressTableModel::Label, QHeaderView::Stretch);
     ui->tableView->horizontalHeader()->setSectionResizeMode(AddressTableModel::Address, QHeaderView::ResizeToContents);
+    if (tab == StakingPoolTab) {
+        ui->tableView->horizontalHeader()->setSectionResizeMode(AddressTableModel::Amount, QHeaderView::ResizeToContents);
+
+        ui->tableView->sortByColumn(AddressTableModel::Amount, Qt::DescendingOrder);
+    }
 
     connect(ui->tableView->selectionModel(), &QItemSelectionModel::selectionChanged,
         this, &AddressBookPage::selectionChanged);
@@ -266,6 +278,7 @@ void AddressBookPage::selectionChanged()
             deleteAction->setEnabled(true);
             break;
         case ReceivingTab:
+        case StakingPoolTab:
             // Deleting receiving addresses, however, is not allowed
             ui->deleteAddress->setEnabled(false);
             ui->deleteAddress->setVisible(false);
@@ -320,6 +333,8 @@ void AddressBookPage::on_exportButton_clicked()
     writer.setModel(proxyModel);
     writer.addColumn("Label", AddressTableModel::Label, Qt::EditRole);
     writer.addColumn("Address", AddressTableModel::Address, Qt::EditRole);
+    if(tab == StakingPoolTab)
+        writer.addColumn("Amount", AddressTableModel::Amount, Qt::EditRole);
 
     if(!writer.write()) {
         QMessageBox::critical(this, tr("Exporting Failed"),
