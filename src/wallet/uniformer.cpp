@@ -253,9 +253,16 @@ Result CreateWithdrawPendingTransaction(CWallet* wallet, const CTxDestination &p
         return Result::INVALID_REQUEST;
     }
 
+    // Check epoch edge
+    int nHeight = locked_chain->getHeight().get_value_or(0);
+    if (nHeight % Params().GetConsensus().nSaturnEpockBlocks != ((nHeight + 1) % Params().GetConsensus().nSaturnEpockBlocks)) {
+        errors.push_back(strprintf("Please wait for the next epoch to withdraw: remain %d blocks", 1));
+        return Result::INVALID_REQUEST;
+    }
+
     // Create transaction
     CMutableTransaction txNew;
-    txNew.nLockTime = locked_chain->getHeight().get_value_or(0);
+    txNew.nLockTime = nHeight;
     txNew.vin = { CTxIn(withdrawableEntry, CScript(), CTxIn::SEQUENCE_FINAL - 1) };
     txNew.vout = { CTxOut(coin.out.nValue, coin.out.scriptPubKey, coin.out.payload) };
     txfee = GetMinimumFee(*wallet, 1000, coin_control, nullptr);
