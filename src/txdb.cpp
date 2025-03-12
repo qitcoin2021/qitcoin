@@ -1053,9 +1053,9 @@ void CCoinsViewDB::TrySnapshotStakingPoolStatus(const CBlockIndex *pEpochInitInd
 
         CStakingPoolList prevEpochPools;
         if (db.Read(StakingPoolEntry(&prevEpochHash), prevEpochPools) && !prevEpochPools.empty()) {
-            CAmount prevEpochPoolstakeAmount = 0;
+            CAmount prevEpochPoolStakeAmount = 0;
             for (auto &pool : prevEpochPools) {
-                prevEpochPoolstakeAmount += pool.stakeAmount;
+                prevEpochPoolStakeAmount += pool.stakeAmount;
                 prevEpochPoolStatus[pool.poolID].stakeAmount = pool.stakeAmount;
             }
 
@@ -1087,8 +1087,12 @@ void CCoinsViewDB::TrySnapshotStakingPoolStatus(const CBlockIndex *pEpochInitInd
                             }
 
                             // add pre epoch reward
-                            if (poolState.rewardAmount > 0 && prevEpochPoolstakeAmount > 0) {
-                                userStatus.withdrawableAmount += CalcStakePoolUserReward(poolState.rewardAmount, preEpochPoolUser.stakeAmount, prevEpochPoolstakeAmount);
+                            if (poolState.rewardAmount > 0 && prevEpochPoolStakeAmount > 0) {
+                                CAmount poolStakeAmount = poolState.stakeAmount;
+                                if (pEpochInitIndex->nHeight < consensusParams.nSaturnFixPoolRewardActiveHeight) {
+                                    poolStakeAmount = prevEpochPoolStakeAmount;
+                                }
+                                userStatus.withdrawableAmount += CalcStakePoolUserReward(poolState.rewardAmount, preEpochPoolUser.stakeAmount, poolStakeAmount);
                             }
                         }
                     }

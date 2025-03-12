@@ -101,6 +101,7 @@ public:
 
         consensus.nSaturnActiveHeight = 654201;
         consensus.nSaturnLimitMaxDiffActiveHeight = consensus.nSaturnActiveHeight + 400;
+        consensus.nSaturnFixPoolRewardActiveHeight = 658700;
         consensus.SaturnStakingGenesisID = uint160({ 0x0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }); // P2SH: 334L4RPCoYrrzLZ57xMEz64xgtVEyHNMAX
         consensus.nSaturnEpockBlocks = 100;
         assert(consensus.nSaturnActiveHeight % consensus.nSaturnEpockBlocks == 1);
@@ -235,6 +236,7 @@ public:
 
         consensus.nSaturnActiveHeight = 101;
         consensus.nSaturnLimitMaxDiffActiveHeight = consensus.nSaturnActiveHeight;
+        consensus.nSaturnFixPoolRewardActiveHeight = 0;
         consensus.SaturnStakingGenesisID = uint160({ 0x0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }); // P2SH: 2MtcY8AKER1NDC8Bco5y7c34DuEhQkqToXy
         consensus.nSaturnEpockBlocks = 100;
         assert(consensus.nSaturnActiveHeight % consensus.nSaturnEpockBlocks == 1);
@@ -343,6 +345,7 @@ public:
 
         consensus.nSaturnActiveHeight = 21;
         consensus.nSaturnLimitMaxDiffActiveHeight = consensus.nSaturnActiveHeight;
+        consensus.nSaturnFixPoolRewardActiveHeight = 0;
         consensus.SaturnStakingGenesisID = uint160({ 0x0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }); // P2SH: 2MtcY8AKER1NDC8Bco5y7c34DuEhQkqToXy
         consensus.nSaturnEpockBlocks = 10;
         assert(consensus.nSaturnActiveHeight % consensus.nSaturnEpockBlocks == 1);

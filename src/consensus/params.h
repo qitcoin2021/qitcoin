@@ -76,6 +76,7 @@ struct Params {
     /** Saturn: DPoS */
     int nSaturnActiveHeight;
     int nSaturnLimitMaxDiffActiveHeight;
+    int nSaturnFixPoolRewardActiveHeight;
     /** Saturn: Staking genesis ID */
     uint160 SaturnStakingGenesisID;
     /** Saturn: Blocks per Epoch */
