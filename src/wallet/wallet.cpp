@@ -3080,27 +3080,6 @@ bool CWallet::SignTransaction(CMutableTransaction& tx)
 {
     AssertLockHeld(cs_wallet);
 
-    // sign output for bind plotter
-    for (auto& output : tx.vout) {
-        if (output.payload.empty() || !IsBindPlotterScript(output.payload))
-            continue;
-
-        CTxDestination dest;
-        if (!ExtractDestination(output.scriptPubKey, dest))
-            return false;
-        CKeyID keyid = GetKeyForDestination(*this, dest);
-        if (keyid.IsNull())
-            return false;
-        CKey key;
-        if (!GetKey(keyid, key))
-            return false;
-        CScript signedPayload = SignBindPlotterScript(output.payload, key);
-        if (signedPayload.empty())
-            return false;
-        output.payload = signedPayload;
-    }
-
-    // sign the new tx
     int nIn = 0;
     for (auto& input : tx.vin) {
         SignatureData sigdata;
@@ -3586,33 +3565,6 @@ bool CWallet::CreateTransaction(interfaces::Chain::Lock& locked_chain, const std
 
         if (sign)
         {
-            // sign output for bind plotter
-            for (auto& output : txNew.vout) {
-                if (output.payload.empty() || !IsBindPlotterScript(output.payload))
-                    continue;
-
-                CTxDestination dest;
-                if (!ExtractDestination(output.scriptPubKey, dest))
-                    return false;
-                CKeyID keyid = GetKeyForDestination(*this, dest);
-                if (keyid.IsNull()) {
-                    strFailReason = _("Signing transaction failed").translated;
-                    return false;
-                }
-                CKey key;
-                if (!GetKey(keyid, key)) {
-                    strFailReason = _("Signing transaction failed").translated;
-                    return false;
-                }
-                CScript signedPayload = SignBindPlotterScript(output.payload, key);
-                if (signedPayload.empty()) {
-                    strFailReason = _("Signing transaction payload failed").translated;
-                    return false;
-                }
-                output.payload = signedPayload;
-            }
-
-            // sign the new tx
             int nIn = 0;
             for (const auto& coin : selected_coins)
             {

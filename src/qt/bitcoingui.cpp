@@ -37,7 +37,6 @@
 #include <poc/poc.h>
 #include <pos/pos.h>
 #include <ui_interface.h>
-#include <util/bip39.h>
 #include <util/strencodings.h>
 #include <util/system.h>
 
@@ -383,7 +382,6 @@ void BitcoinGUI::createActions()
     connect(optionsAction, &QAction::triggered, this, &BitcoinGUI::optionsClicked);
     connect(toggleHideAction, &QAction::triggered, this, &BitcoinGUI::toggleHidden);
     connect(showHelpMessageAction, &QAction::triggered, this, &BitcoinGUI::showHelpMessageClicked);
-    connect(generatePassphraseAction, &QAction::triggered, this, &BitcoinGUI::generatePassphraseClicked);
     connect(openRPCConsoleAction, &QAction::triggered, this, &BitcoinGUI::showDebugWindow);
     // prevents an open debug window from becoming stuck/unusable on client shutdown
     connect(quitAction, &QAction::triggered, rpcConsole, &QWidget::hide);
@@ -841,41 +839,6 @@ void BitcoinGUI::showDebugWindowActivateConsole()
 void BitcoinGUI::showHelpMessageClicked()
 {
     helpMessageDialog->show();
-}
-
-void BitcoinGUI::generatePassphraseClicked()
-{
-    QString information;
-    information += "<span style='color:#aa0000;'>" + tr("This account is randomly generated, please save it. Loss will make plotting data invalid.") + "</span><br/><br/>";
-
-    // PoC
-    {
-        auto passphrase = BIP39_JoinMnemonic(BIP39_GenMnemonic(12));
-
-        information += tr("For PoC:") + "<br/>";
-        information += tr("Passphrase: %1").arg(QString::fromStdString(passphrase)) + "<br/>";
-        information += tr("Plotter ID: %1").arg(QString::number(poc::GeneratePlotterId(passphrase))) + "<br/>";
-    }
-
-    information += "<br/>";
-
-    // PoS
-    {
-        auto passphrase = BIP39_JoinMnemonic(BIP39_GenMnemonic(24));
-        auto masterPrivateKey = pos::GeneratePrivateKey(passphrase);
-        auto farmerPublicKeyBytes = pos::DeriveMasterToFarmer(masterPrivateKey).GetG1Element().Serialize();
-        auto poolPublicKeyBytes = pos::DeriveMasterToPool(masterPrivateKey).GetG1Element().Serialize();
-
-        information += tr("For PoS:") + "<br/>";
-        information += tr("Passphrase: %1").arg(QString::fromStdString(passphrase)) + "<br/>";
-        information += tr("Farmer Public Key: %1").arg(QString::fromStdString(HexStr(farmerPublicKeyBytes))) + "<br/>";
-        information += tr("Pool Public Key: %1").arg(QString::fromStdString(HexStr(poolPublicKeyBytes))) + "<br/>";
-        information += tr("Plotter ID: %1").arg(QString::number(pos::ToFarmerId(farmerPublicKeyBytes))) + "<br/>";
-    }
-
-    QMessageBox messageBox(QMessageBox::Information, tr("Generate plotting account"), information, QMessageBox::Ok, this);
-    messageBox.setTextInteractionFlags(Qt::TextSelectableByKeyboard|Qt::TextSelectableByMouse);
-    messageBox.exec();
 }
 
 #ifdef ENABLE_WALLET

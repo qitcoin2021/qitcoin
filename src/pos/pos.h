@@ -25,10 +25,6 @@ typedef std::vector<unsigned char> Bytes;
 const static int32_t MIN_PLOT_SIZE = 32;
 const static int32_t MAX_PLOT_SIZE = 50;
 
-/** Create farmer private key by passphrase
-*/
-bls::PrivateKey GeneratePrivateKey(const std::string& passphrase);
-
 /** Derive private key
 */
 bls::PrivateKey DeriveMasterToFarmer(const bls::PrivateKey& privateKey);

@@ -181,9 +181,6 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "listbindplotters", 2, "include_watchonly" },
     { "listbindplotterofaddress", 2, "count" },
     { "listbindplotterofaddress", 3, "verbose" },
-    { "createbindplotterdata", 2, "lastActiveHeight" },
-    { "getpledge", 1, "verbose" },
-    { "getpledgeofaddress", 2, "verbose" },
     { "withdrawpoint", 3, "replaceable" },
     { "withdrawpoint", 4, "conf_target" },
     { "listpoints", 0, "count" },
@@ -198,14 +195,9 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "liststakings", 0, "count" },
     { "liststakings", 1, "skip" },
     { "liststakings", 2, "include_watchonly" },
-    { "getplottermininginfo", 1, "verbose" },
     { "getchaintips", 0, "verbose" },
     { "getstakingepoch", 0, "hash_or_height" },
     { "createinitialstakingpooltx", 1, "commit_transaction" },
-
-    /* Qitcoin & Burst mining compatible */
-    { "submitNonce", 2, "height" },
-    { "submitNonce", 4, "checkBind" },
 
 #ifdef ENABLE_OMNICORE
     /* Omni Core - data retrieval calls */
