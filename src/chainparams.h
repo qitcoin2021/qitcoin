@@ -23,6 +23,7 @@ typedef std::map<int, uint256> MapCheckpoints;
 
 struct CCheckpointData {
     MapCheckpoints mapCheckpoints;
+    MapCheckpoints mapPoolStatusCheckpoints;
 };
 
 /**

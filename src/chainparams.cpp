@@ -184,8 +184,16 @@ public:
                 {  170000, uint256S("0xf6963688821c1bed7d09214b987032b26640a9c4c7cf7de484f3f8cb977c7028") }, // fork
                 {  654200, uint256S("0x9b36beed8a870e623b94da5fb9ae277104f2e5e6c713699f594d73651d2e112f") },
                 {  654201, uint256S("0xda056a44bf944377e0c4e7c1f87d01cb4857138e05cfe14212e9e2672e52d6a7") },
+                {  658701, uint256S("0x087138e8580746b236ec189b39e17345543cc00e1eda0005d734e5593c49959d") }, // fork
+            },
+            {
+                {  654200, uint256S("0xea7467120de72e5eefaeeabd1c1b9bf348cbe6e664dae49921efdc31ea248ddd") },
+                {  658700, uint256S("0x12432d1dd285d08b06bddbf01466df6ada45ff6b6ea4b36f09707f32a532b080") }, // fork
+                {  658800, uint256S("0x8cb0275e453bd54ab1f5c208bd4f66ca32a58652fc21bc05f4a92805e629335c") },
+                {  665300, uint256S("0x61c39e2b7e4e993e127d027fc6f6d21b0611d9e4b13594754da144167bdb9ffd") },
             }
         };
+        assert(checkpointData.mapPoolStatusCheckpoints.empty() || checkpointData.mapPoolStatusCheckpoints.begin()->first + 1 >= consensus.nSaturnActiveHeight);
 
         chainTxData = ChainTxData{
             // Data from RPC: getchaintxstats 4096 f6ef703542456bb043ea41e5282d6c365f33a733d3acd5d01e9559be8b7c35dd
