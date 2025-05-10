@@ -35,9 +35,11 @@ SendCoinsEntry::SendCoinsEntry(PayOperateMethod payOperateMethod, const Platform
     ui->setupUi(this);
 
     ui->stakingPoolLabel->setVisible(false);
-    ui->stakingPoolSelector->setVisible(false);
-    ui->reloadStakingPools->setVisible(false);
+    ui->stakingPoolPayTo->setVisible(false);
+    ui->stakingPoolAddressBookButton->setVisible(false);
+    ui->stakingPoolPasteButton->setVisible(false);
     ui->createStakingPool->setVisible(false);
+    ui->withdrawStakingButton->setVisible(false);
 
     ui->addressBookButton->setIcon(platformStyle->SingleColorIcon(":/icons/address-book"));
     ui->pasteButton->setIcon(platformStyle->SingleColorIcon(":/icons/editpaste"));
@@ -54,6 +56,7 @@ SendCoinsEntry::SendCoinsEntry(PayOperateMethod payOperateMethod, const Platform
 
     // normal bitcoin address field
     GUIUtil::setupAddressWidget(ui->payTo, this);
+    GUIUtil::setupAddressWidget(ui->stakingPoolPayTo, this);
     // just a label for displaying bitcoin address(es)
     ui->payTo_is->setFont(GUIUtil::fixedPitchFont());
 
@@ -71,9 +74,12 @@ SendCoinsEntry::SendCoinsEntry(PayOperateMethod payOperateMethod, const Platform
         ui->labellLabel->setVisible(false);
         ui->addAsLabel->setVisible(false);
         ui->stakingPoolLabel->setVisible(true);
-        ui->stakingPoolSelector->setVisible(true);
-        ui->reloadStakingPools->setVisible(true);
+        ui->stakingPoolPayTo->setVisible(true);
+        ui->stakingPoolAddressBookButton->setVisible(true);
+        ui->stakingPoolPasteButton->setVisible(true);
         ui->createStakingPool->setVisible(true);
+        ui->withdrawStakingButton->setVisible(true);
+        ui->deleteButton->setVisible(false);
     }
 }
 
@@ -107,19 +113,24 @@ void SendCoinsEntry::on_payTo_textChanged(const QString &address)
     updateLabel(address);
 }
 
-void SendCoinsEntry::on_reloadStakingPools_clicked()
+void SendCoinsEntry::on_stakingPoolPasteButton_clicked()
+{
+    // Paste text from clipboard into recipient field
+    ui->stakingPoolPayTo->setText(QApplication::clipboard()->text());
+}
+
+void SendCoinsEntry::on_stakingPoolAddressBookButton_clicked()
 {
     if(!model)
         return;
-
-    ui->stakingPoolSelector->clear();
-    for (const auto &pool : model->wallet().chain().getStakingPools()) {
-        std::string poolAddress = EncodeDestination(ExtractDestination(pool.poolID));
-        std::string poolAmount = std::to_string(pool.stakeAmount / COIN);
-        ui->stakingPoolSelector->addItem(QString::fromStdString(poolAddress) + " (" + QString::fromStdString(poolAmount) + " QTC)");
+    AddressTableModel addressTableModel(model, true);
+    AddressBookPage dlg(platformStyle, AddressBookPage::ForSelection, AddressBookPage::StakingPoolTab, this);
+    dlg.setModel(&addressTableModel);
+    if(dlg.exec())
+    {
+        ui->stakingPoolPayTo->setText(dlg.getReturnValue());
+        ui->payTo->setFocus();
     }
-    if (ui->stakingPoolSelector->count() > 0)
-        ui->stakingPoolSelector->setCurrentIndex(0);
 }
 
 void SendCoinsEntry::on_createStakingPool_clicked()
@@ -127,13 +138,33 @@ void SendCoinsEntry::on_createStakingPool_clicked()
     if(!model)
         return;
 
+    if (!model->validateAddress(ui->stakingPoolPayTo->text()))
+    {
+        ui->stakingPoolPayTo->setValid(false);
+        return;
+    }
+
+    model->createStakingPool(ui->stakingPoolPayTo->text().toStdString());
+}
+
+void SendCoinsEntry::on_withdrawStakingButton_clicked()
+{
+    if(!model)
+        return;
+
+    QString poolAddress = getCurrentPoolAddress();
+    if (!model->validateAddress(poolAddress))
+    {
+        return;
+    }
+
     if (!model->validateAddress(ui->payTo->text()))
     {
         ui->payTo->setValid(false);
         return;
     }
 
-    model->createStakingPool(ui->payTo->text());
+    model->withdrawStakingPending(poolAddress.toStdString(), ui->payTo->text().toStdString());
 }
 
 void SendCoinsEntry::setModel(WalletModel *_model)
@@ -143,7 +174,6 @@ void SendCoinsEntry::setModel(WalletModel *_model)
     if (_model && _model->getOptionsModel())
         connect(_model->getOptionsModel(), &OptionsModel::displayUnitChanged, this, &SendCoinsEntry::updateDisplayUnit);
 
-    on_reloadStakingPools_clicked();
     clear();
 }
 
@@ -226,12 +256,15 @@ bool SendCoinsEntry::validate(interfaces::Node& node)
     // Special tx amount
     if (payOperateMethod == PayOperateMethod::Staking)
     {
+        if (!model->validateAddress(ui->stakingPoolPayTo->text()))
+        {
+            ui->stakingPoolPayTo->setValid(false);
+            retval = false;
+        }
+        
         if (ui->payAmount->value() < PROTOCOL_STAKING_AMOUNT_MIN ||
                 (ui->checkboxSubtractFeeFromAmount->checkState() == Qt::Checked && ui->payAmount->value() <= PROTOCOL_STAKING_AMOUNT_MIN)) {
             ui->payAmount->setValid(false);
-            retval = false;
-        }
-        if (ui->stakingPoolSelector->currentText().isEmpty()) {
             retval = false;
         }
     }
@@ -254,7 +287,7 @@ SendCoinsRecipient SendCoinsEntry::getValue()
     recipient.message = ui->messageTextLabel->text();
     recipient.fSubtractFeeFromAmount = (ui->checkboxSubtractFeeFromAmount->checkState() == Qt::Checked);
     if (payOperateMethod == PayOperateMethod::Staking) {
-        QString poolAddress = ui->stakingPoolSelector->currentText().split(" ")[0];
+        QString poolAddress = getCurrentPoolAddress();
         recipient.payload = GetStakingScriptForDestination(DecodeDestination(poolAddress.toStdString()), PROTOCOL_STAKING_LOCK_BLOCKS_FULL_AMOUNT);
         recipient.address = recipient.address;
         recipient.label = "";
@@ -263,9 +296,15 @@ SendCoinsRecipient SendCoinsEntry::getValue()
     return recipient;
 }
 
+QString SendCoinsEntry::getCurrentPoolAddress()
+{
+    return ui->stakingPoolPayTo->text();
+}
+
 QWidget *SendCoinsEntry::setupTabChain(QWidget *prev)
 {
-    QWidget::setTabOrder(prev, ui->payTo);
+    QWidget::setTabOrder(prev, ui->stakingPoolPayTo);
+    QWidget::setTabOrder(ui->stakingPoolPayTo, ui->payTo);
     QWidget::setTabOrder(ui->payTo, ui->addAsLabel);
     QWidget *w = ui->payAmount->setupTabChain(ui->addAsLabel);
     QWidget::setTabOrder(w, ui->checkboxSubtractFeeFromAmount);

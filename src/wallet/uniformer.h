@@ -33,28 +33,6 @@ enum class Result
 //! Return whether coin can be unfreeze.
 bool CoinCanBeUnfreeze(const CWallet* wallet, const COutPoint& outpoint);
 
-//! Create bind plotter tnrasaction.
-Result CreateBindPlotterTransaction(CWallet* wallet,
-                                    const CTxDestination &dest,
-                                    const CScript &bindScriptData,
-                                    bool fAllowHighFee,
-                                    const CCoinControl& coin_control,
-                                    std::vector<std::string>& errors,
-                                    CAmount& txfee,
-                                    CMutableTransaction& mtx);
-
-//! Create point transaction.
-Result CreatePointTransaction(CWallet* wallet,
-                              const CTxDestination &senderDest,
-                              const CTxDestination &receiverDest,
-                              CAmount nAmount,
-                              int nLockBlocks,
-                              bool fSubtractFeeFromAmount,
-                              const CCoinControl& coin_control,
-                              std::vector<std::string>& errors,
-                              CAmount& txfee,
-                              CMutableTransaction& mtx);
-
 //! Create staking transaction.
 Result CreateStakingTransaction(CWallet* wallet,
                                 const CTxDestination &poolDest,

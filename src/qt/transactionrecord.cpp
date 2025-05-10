@@ -37,7 +37,7 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const interface
     uint256 hash = wtx.tx->GetHash();
     std::map<std::string, std::string> mapValue = wtx.value_map;
 
-    if (nNet > 0 || wtx.is_coinbase)
+    if (nNet >= 0 || wtx.is_coinbase)
     {
         //
         // Credit
@@ -49,7 +49,6 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const interface
             if(mine)
             {
                 TransactionRecord sub(hash, nTime);
-                CTxDestination address;
                 sub.idx = i; // vout index
                 sub.credit = txout.nValue;
                 sub.involvesWatchAddress = mine & ISMINE_WATCH_ONLY;
@@ -71,6 +70,14 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const interface
                     sub.type = TransactionRecord::Generated;
                 }
 
+                updateTransactionRecord(wtx, i, sub);
+                parts.append(sub);
+            }
+            else if(wtx.txout_payload_is_mine[i])
+            {
+                TransactionRecord sub(hash, nTime);
+                sub.idx = i; // vout index
+                sub.involvesWatchAddress = wtx.txout_payload_is_mine[i] & ISMINE_WATCH_ONLY;
                 updateTransactionRecord(wtx, i, sub);
                 parts.append(sub);
             }
@@ -182,7 +189,6 @@ bool TransactionRecord::updateTransactionRecord(const interfaces::WalletTx& wtx,
 
         sub.type = TransactionRecord::PointSent;
         sub.address = EncodeDestination(ScriptHash(PointPayload::As(payload)->GetReceiverID()));
-        sub.debit += -wtx.tx->vout[nOut].nValue;
         if (wtx.txout_payload_is_mine[nOut] & ISMINE_ALL)
         {
             if (wtx.txout_is_mine[nOut])
@@ -192,13 +198,9 @@ bool TransactionRecord::updateTransactionRecord(const interfaces::WalletTx& wtx,
             else
             {
                 sub.type = TransactionRecord::PointReceived;
-                sub.debit = PointPayload::As(payload)->GetAmount();
             }
         }
-        if (sub.debit < 0)
-        {
-            sub.comment = ValueFromAmount(PointPayload::As(payload)->GetAmount()).getValStr();
-        }
+        sub.comment = ValueFromAmount(PointPayload::As(payload)->GetAmount()).getValStr();
     }
     else if (wtx.txout_payload_is_mine[nOut] & ISMINE_STAKING)
     {
@@ -208,7 +210,6 @@ bool TransactionRecord::updateTransactionRecord(const interfaces::WalletTx& wtx,
 
         sub.type = TransactionRecord::StakingSent;
         sub.address = EncodeDestination(ScriptHash(StakingPayload::As(payload)->GetReceiverID()));
-        sub.debit = -wtx.tx->vout[nOut].nValue;
         if (wtx.txout_payload_is_mine[nOut] & ISMINE_ALL)
         {
             if (wtx.txout_is_mine[nOut])
@@ -218,13 +219,9 @@ bool TransactionRecord::updateTransactionRecord(const interfaces::WalletTx& wtx,
             else
             {
                 sub.type = TransactionRecord::StakingReceived;
-                sub.debit = StakingPayload::As(payload)->GetAmount();
             }
         }
-        if (sub.debit < 0)
-        {
-            sub.comment = ValueFromAmount(StakingPayload::As(payload)->GetAmount()).getValStr();
-        }
+        sub.comment = ValueFromAmount(StakingPayload::As(payload)->GetAmount()).getValStr();
     }
     else
     {

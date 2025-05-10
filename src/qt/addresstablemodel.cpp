@@ -37,11 +37,12 @@ struct AddressTableEntry
     Type type;
     QString label;
     QString address;
+    CAmount amount;
     bool fPrimary;
 
     AddressTableEntry() {}
-    AddressTableEntry(Type _type, const QString &_label, const QString &_address):
-        type(_type), label(_label), address(_address), fPrimary(false) {}
+    AddressTableEntry(Type _type, const QString &_label, const QString &_address, CAmount _amount = 0) :
+        type(_type), label(_label), address(_address), amount(_amount), fPrimary(false) {}
 };
 
 struct AddressTableEntryLessThan
@@ -80,13 +81,28 @@ class AddressTablePriv
 public:
     QList<AddressTableEntry> cachedAddressTable;
     AddressTableModel *parent;
+    bool fForStakingPool;
 
-    explicit AddressTablePriv(AddressTableModel *_parent):
-        parent(_parent) {}
+    explicit AddressTablePriv(AddressTableModel *_parent, bool _fForStakingPool):
+        parent(_parent), fForStakingPool(_fForStakingPool) {}
 
     void refreshAddressTable(interfaces::Wallet& wallet)
     {
         cachedAddressTable.clear();
+        if (fForStakingPool)
+        {
+            for (const auto& pool : wallet.chain().getStakingPools())
+            {
+                const CTxDestination dest = ExtractDestination(pool.poolID);
+                std::string name; wallet.getAddress(dest, &name, nullptr, nullptr);
+                AddressTableEntry entry(AddressTableEntry::Sending,
+                                        QString::fromStdString(name),
+                                        QString::fromStdString(EncodeDestination(dest)),
+                                        pool.stakeAmount);
+                cachedAddressTable.append(entry);
+            }
+        }
+        else
         {
             for (const auto& address : wallet.getAddresses())
             {
@@ -174,11 +190,13 @@ public:
     }
 };
 
-AddressTableModel::AddressTableModel(WalletModel *parent) :
+AddressTableModel::AddressTableModel(WalletModel *parent, bool fForStakingPool) :
     QAbstractTableModel(parent), walletModel(parent)
 {
     columns << tr("Label") << tr("Address");
-    priv = new AddressTablePriv(this);
+    if (fForStakingPool)
+        columns << tr("Amount");
+    priv = new AddressTablePriv(this, fForStakingPool);
     priv->refreshAddressTable(parent->wallet());
 }
 
@@ -221,6 +239,8 @@ QVariant AddressTableModel::data(const QModelIndex &index, int role) const
             }
         case Address:
             return rec->address;
+        case Amount:
+            return BitcoinUnits::formatWithUnit(BitcoinUnits::BTC, rec->amount);
         }
     }
     else if (role == Qt::FontRole)
@@ -281,6 +301,7 @@ bool AddressTableModel::setData(const QModelIndex &index, const QVariant &value,
                 editStatus = NO_CHANGES;
                 return false;
             }
+            rec->label = value.toString(); // for staking pool
             walletModel->wallet().setAddressBook(curAddress, value.toString().toStdString(), strPurpose);
         } else if(index.column() == Address) {
             CTxDestination newAddress = DecodeDestination(value.toString().toStdString());

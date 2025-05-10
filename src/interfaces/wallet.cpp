@@ -10,6 +10,7 @@
 #include <interfaces/chain.h>
 #include <interfaces/handler.h>
 #include <key_io.h>
+#include <node/transaction.h>
 #include <policy/feerate.h>
 #include <policy/fees.h>
 #include <primitives/transaction.h>
@@ -289,6 +290,13 @@ public:
         LOCK(m_wallet->cs_wallet);
         return m_wallet->AbandonTransaction(*locked_chain, txid);
     }
+    bool transactionCanBeRemoved(const uint256& txid) const override { return m_wallet->TransactionCanBeRemoved(txid); }
+    bool removeTransaction(const uint256& txid) override
+    {
+        auto locked_chain = m_wallet->chain().lock();
+        LOCK(m_wallet->cs_wallet);
+        return m_wallet->RemoveTransaction(*locked_chain, txid);
+    }
     bool transactionCanBeBumped(const uint256& txid) const override
     {
         return feebumper::TransactionCanBeBumped(m_wallet.get(), txid);
@@ -354,6 +362,29 @@ public:
             uniformer::Result::OK;
     }
     bool signAndCommitStakingPoolTransaction(CMutableTransaction&& mtx, std::vector<std::string>& errors) override
+    {
+        // sign
+        if (!uniformer::SignTransaction(m_wallet.get(), mtx)) {
+            errors.push_back("Bad sign");
+            return false;
+        }
+
+        // commit
+        return uniformer::CommitTransaction(m_wallet.get(), std::move(mtx), mapValue_t{}, errors) ==
+               uniformer::Result::OK;
+    }
+    bool createWithdrawPendingTransaction(const CTxDestination &poolOwnerDest,
+        const CTxDestination &userDest,
+        std::vector<std::string>& errors,
+        CAmount& total,
+        CAmount& total_fee,
+        CMutableTransaction& mtx) override
+    {
+        CCoinControl coin_control;
+        return uniformer::CreateWithdrawPendingTransaction(m_wallet.get(), poolOwnerDest, userDest, coin_control, errors, total, total_fee, mtx) ==
+               uniformer::Result::OK;
+    }
+    bool signAndCommitWithdrawPendingTransaction(CMutableTransaction&& mtx, std::vector<std::string>& errors) override
     {
         // sign
         if (!uniformer::SignTransaction(m_wallet.get(), mtx)) {

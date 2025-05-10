@@ -1398,6 +1398,12 @@ public:
     /* Mark a transaction (and it in-wallet descendants) as abandoned so its inputs may be respent. */
     bool AbandonTransaction(interfaces::Chain::Lock& locked_chain, const uint256& hashTx);
 
+    /** Return whether transaction can be removed */
+    bool TransactionCanBeRemoved(const uint256& hashTx) const;
+
+    /* Mark a transaction (and it in-wallet descendants) as removed so its inputs may be respent. */
+    bool RemoveTransaction(interfaces::Chain::Lock& locked_chain, const uint256& hashTx);
+
     /** Mark a transaction as replaced by another transaction (e.g., BIP 125). */
     bool MarkReplaced(const uint256& originalHash, const uint256& newHash);
 

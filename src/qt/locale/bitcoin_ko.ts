@@ -3172,6 +3172,10 @@ Note:  Since the fee is calculated on a per-byte basis, a fee of "100 satoshis p
         <translation>버려진 거래</translation>
     </message>
     <message>
+        <source>Remove transaction</source>
+        <translation>거래 삭제</translation>
+    </message>
+    <message>
         <source>Increase transaction fee</source>
         <translation>거래 수수료 증가</translation>
     </message>

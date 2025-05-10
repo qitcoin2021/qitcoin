@@ -8,7 +8,6 @@
 #include <crypto/sha256.h>
 #include <poc/poc.h>
 #include <primitives/block.h>
-#include <util/bip39.h>
 #include <util/strencodings.h>
 
 namespace {
@@ -37,12 +36,6 @@ bls::PrivateKey DerivePrivateKey(const bls::PrivateKey& privateKey, const std::v
 }
 
 namespace pos {
-
-bls::PrivateKey GeneratePrivateKey(const std::string& passphrase)
-{
-    auto seed = BIP39_MnemonicToSeed(passphrase, "");
-    return bls::AugSchemeMPL().KeyGen(seed);
-}
 
 bls::PrivateKey DeriveMasterToFarmer(const bls::PrivateKey& privateKey)
 {

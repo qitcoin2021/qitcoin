@@ -76,6 +76,7 @@ private:
     QDateTimeEdit *dateFrom;
     QDateTimeEdit *dateTo;
     QAction *abandonAction;
+    QAction *removeAction;
     QAction *bumpFeeAction;
     QAction *unfreezeAction;
 
@@ -101,6 +102,7 @@ private Q_SLOTS:
     void openThirdPartyTxUrl(QString url);
     void updateWatchOnlyColumn(bool fHaveWatchOnly);
     void abandonTx();
+    void removeTx();
     void bumpFee();
     void unfreezeTx();
 

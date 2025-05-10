@@ -1463,6 +1463,37 @@ bool CWallet::AbandonTransaction(interfaces::Chain::Lock& locked_chain, const ui
     return true;
 }
 
+bool CWallet::TransactionCanBeRemoved(const uint256& hashTx) const
+{
+    auto locked_chain = chain().lock();
+    LOCK(cs_wallet);
+    const CWalletTx* wtx = GetWalletTx(hashTx);
+    return wtx && wtx->GetDepthInMainChain(*locked_chain) == 0 && !wtx->InMempool();
+}
+
+bool CWallet::RemoveTransaction(interfaces::Chain::Lock& locked_chain, const uint256& hashTx)
+{
+    // try abandon
+    AbandonTransaction(locked_chain, hashTx);
+
+    // remove from wallet
+    {
+        auto locked_chain = chain().lock();
+        LOCK(cs_wallet);
+
+        std::vector<uint256> vHashIn, vHashOut;
+        vHashIn.push_back(hashTx);
+
+        if (ZapSelectTx(vHashIn, vHashOut) != DBErrors::LOAD_OK) {
+            return false;
+        }
+        if(vHashOut.empty()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void CWallet::MarkConflicted(const uint256& hashBlock, const uint256& hashTx)
 {
     auto locked_chain = chain().lock();
@@ -2473,6 +2504,13 @@ CAmount CWalletTx::GetCredit(interfaces::Chain::Lock& locked_chain, const ismine
     if (IsImmatureCoinBase(locked_chain))
         return 0;
 
+    // Check if the transaction is invalid frozen
+    if ((filter & ISMINE_FROZEN) &&
+        m_confirm.status != CWalletTx::UNCONFIRMED &&
+        m_confirm.status != CWalletTx::CONFIRMED) {
+        return 0;
+    }
+
     CAmount credit = 0;
     if (filter & ISMINE_SPENDABLE) {
         // GetBalance can assume transactions in mapWallet won't change
@@ -3042,27 +3080,6 @@ bool CWallet::SignTransaction(CMutableTransaction& tx)
 {
     AssertLockHeld(cs_wallet);
 
-    // sign output for bind plotter
-    for (auto& output : tx.vout) {
-        if (output.payload.empty() || !IsBindPlotterScript(output.payload))
-            continue;
-
-        CTxDestination dest;
-        if (!ExtractDestination(output.scriptPubKey, dest))
-            return false;
-        CKeyID keyid = GetKeyForDestination(*this, dest);
-        if (keyid.IsNull())
-            return false;
-        CKey key;
-        if (!GetKey(keyid, key))
-            return false;
-        CScript signedPayload = SignBindPlotterScript(output.payload, key);
-        if (signedPayload.empty())
-            return false;
-        output.payload = signedPayload;
-    }
-
-    // sign the new tx
     int nIn = 0;
     for (auto& input : tx.vin) {
         SignatureData sigdata;
@@ -3288,7 +3305,12 @@ bool CWallet::CreateTransaction(interfaces::Chain::Lock& locked_chain, const std
             if (!boost::get<CNoDestination>(&coin_control.destChange)) {
                 scriptChange = GetScriptForDestination(coin_control.destChange);
             } else { // no coin control: send change to primary address
-                scriptChange = GetScriptForDestination(GetPrimaryDestination());
+                CTxDestination primaryDest = GetPrimaryDestination();
+                if (!IsValidDestination(primaryDest)) {
+                    strFailReason = _("Invalid primary destination address").translated;
+                    return false;
+                }
+                scriptChange = GetScriptForDestination(primaryDest);
             }
             CTxOut change_prototype_txout(0, scriptChange);
             coin_selection_params.change_output_size = GetSerializeSize(change_prototype_txout);
@@ -3543,33 +3565,6 @@ bool CWallet::CreateTransaction(interfaces::Chain::Lock& locked_chain, const std
 
         if (sign)
         {
-            // sign output for bind plotter
-            for (auto& output : txNew.vout) {
-                if (output.payload.empty() || !IsBindPlotterScript(output.payload))
-                    continue;
-
-                CTxDestination dest;
-                if (!ExtractDestination(output.scriptPubKey, dest))
-                    return false;
-                CKeyID keyid = GetKeyForDestination(*this, dest);
-                if (keyid.IsNull()) {
-                    strFailReason = _("Signing transaction failed").translated;
-                    return false;
-                }
-                CKey key;
-                if (!GetKey(keyid, key)) {
-                    strFailReason = _("Signing transaction failed").translated;
-                    return false;
-                }
-                CScript signedPayload = SignBindPlotterScript(output.payload, key);
-                if (signedPayload.empty()) {
-                    strFailReason = _("Signing transaction payload failed").translated;
-                    return false;
-                }
-                output.payload = signedPayload;
-            }
-
-            // sign the new tx
             int nIn = 0;
             for (const auto& coin : selected_coins)
             {
@@ -3652,6 +3647,8 @@ bool CWallet::CommitTransaction(CTransactionRef tx, mapValue_t mapValue, std::ve
             // Notify that old coins are spent
             for (const CTxIn& txin : wtxNew.tx->vin)
             {
+                if (!mapWallet.count(txin.prevout.hash))
+                    continue;
                 CWalletTx &coin = mapWallet.at(txin.prevout.hash);
                 coin.BindWallet(this);
                 NotifyTransactionChanged(this, coin.GetHash(), CT_UPDATED);
@@ -3925,6 +3922,19 @@ bool CWallet::TopUpKeyPool(unsigned int kpSize)
             WalletLogPrintf("keypool added %d keys (%d internal), size=%u (%u internal)\n", missingInternal + missingExternal, missingInternal, setInternalKeyPool.size() + setExternalKeyPool.size(), setInternalKeyPool.size());
         }
     }
+
+    // set primary destination if it is invalid
+    if (!IsValidDestination(GetPrimaryDestination())) {
+        CTxDestination newPrimaryDest;
+        {
+            LOCK(cs_wallet);
+            if (!mapAddressBook.empty())
+            newPrimaryDest = mapAddressBook.cbegin()->first;
+        }
+        if (IsValidDestination(newPrimaryDest))
+            SetPrimaryDestination(newPrimaryDest);
+    }
+
     NotifyCanGetAddressesChanged();
     return true;
 }
@@ -4770,7 +4780,7 @@ std::shared_ptr<CWallet> CWallet::CreateWalletFromFile(interfaces::Chain& chain,
 
     // Check and set primary address
     CTxDestination primaryDest = walletInstance->GetPrimaryDestination();
-    if (!boost::get<ScriptHash>(&primaryDest)) {
+    if (!IsValidDestination(primaryDest)) {
         // Generate new address
         LOCK(walletInstance->cs_wallet);
         CPubKey pubkey;
@@ -4778,7 +4788,7 @@ std::shared_ptr<CWallet> CWallet::CreateWalletFromFile(interfaces::Chain& chain,
             walletInstance->LearnRelatedScripts(pubkey, walletInstance->m_default_address_type);
             primaryDest = GetDestinationForKey(pubkey, walletInstance->m_default_address_type);
         }
-        if (boost::get<ScriptHash>(&primaryDest)) {
+        if (IsValidDestination(primaryDest)) {
             bool fSuccess = walletInstance->SetPrimaryDestination(primaryDest);
             assert(fSuccess);
         }

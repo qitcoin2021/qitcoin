@@ -2376,10 +2376,29 @@ static UniValue getstakingepoch(const JSONRPCRequest& request)
 
     UniValue ret(UniValue::VOBJ);
     ret.pushKV("epoch_hash", pEpochInitIndex->GetBlockHash().GetHex());
+    ret.pushKV("status_hash", GetStakingPoolStatusHash(pEpochInitIndex->GetBlockHash()).GetHex());
     ret.pushKV("from_height", pEpochInitIndex->nHeight + 1);
     ret.pushKV("to_height", pEpochInitIndex->nHeight + consensusParams.nSaturnEpockBlocks);
     ret.pushKV("initial_staking_pool_amount", ValueFromAmount(GetInitialStakingPoolAmount(pindex->nHeight, consensusParams)));
     ret.pushKV("genesis_staking_pool_address", EncodeDestination(ExtractDestination(consensusParams.SaturnStakingGenesisID)));
+
+    if (pindex->nHeight == 0) {
+        UniValue allEpoch(UniValue::VARR);
+        for (int nHeight = consensusParams.nSaturnActiveHeight; nHeight <= ::ChainActive().Height(); nHeight += consensusParams.nSaturnEpockBlocks)
+        {
+            const CBlockIndex* pEpochInitIndex = GetEpochInitIndex(::ChainActive()[nHeight], consensusParams);
+            assert(pEpochInitIndex != nullptr);
+
+            UniValue epochObj(UniValue::VOBJ);
+            epochObj.pushKV("epoch_hash", pEpochInitIndex->GetBlockHash().GetHex());
+            epochObj.pushKV("status_hash", GetStakingPoolStatusHash(pEpochInitIndex->GetBlockHash()).GetHex());
+            epochObj.pushKV("from_height", pEpochInitIndex->nHeight + 1);
+            epochObj.pushKV("to_height", pEpochInitIndex->nHeight + consensusParams.nSaturnEpockBlocks);
+            allEpoch.push_back(epochObj);
+        }
+        ret.pushKV("all", allEpoch);
+    }
+
     return ret;
 }
 

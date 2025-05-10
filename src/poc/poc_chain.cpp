@@ -449,166 +449,6 @@ uint64_t CalculateBaseTarget(const CBlockIndex& prevBlockIndex, const CBlockHead
     }
 }
 
-static uint64_t addNonce(uint64_t& bestDeadline, const CBlockIndex& miningBlockIndex,
-    const CBlockHeader& block, const std::string& generateTo,
-    bool fCheckBind, const Consensus::Params& params)
-{
-    AssertLockHeld(cs_main);
-
-    if (miningBlockIndex.nHeight > params.nSaturnActiveHeight)
-        throw JSONRPCError(RPC_INVALID_REQUEST, "Disabled");
-
-    const uint64_t calcUnformattedDeadline = CalculateUnformattedDeadline(miningBlockIndex, block, params);
-    if (calcUnformattedDeadline == INVALID_DEADLINE)
-        throw JSONRPCError(RPC_INVALID_REQUEST, "Invalid deadline");
-
-    const uint64_t calcDeadline = calcUnformattedDeadline / miningBlockIndex.nBaseTarget;
-    LogPrint(BCLog::POC, "Add nonce: height=%d, nonce=%" PRIu64 ", plotterId=%" PRIu64 ", deadline=%" PRIu64 "\n",
-        miningBlockIndex.nHeight + 1, block.nNonce, block.nPlotterId, calcDeadline);
-    bestDeadline = calcDeadline;
-    bool fNewBest = false;
-    if (miningBlockIndex.nHeight >= ::ChainActive().Height() - 1) {
-        // Only tip and previous block
-        auto it = mapGenerators.find(miningBlockIndex.GetNextGenerationSignature().GetUint64(0));
-        if (it != mapGenerators.end()) {
-            if (it->second.best > calcUnformattedDeadline) {
-                fNewBest = true;
-            } else {
-                fNewBest = false;
-                bestDeadline = it->second.best / miningBlockIndex.nBaseTarget;
-            }
-        } else {
-            fNewBest = true;
-        }
-    }
-
-    if (fNewBest) {
-        CTxDestination dest;
-        std::shared_ptr<CKey> privKey;
-        if (generateTo.empty()) {
-            // Update generate address from wallet
-        #ifdef ENABLE_WALLET
-            auto pwallet = HasWallets() ? GetWallets()[0] : nullptr;
-            if (!pwallet)
-                throw JSONRPCError(RPC_WALLET_NOT_FOUND, "Require generate destination address or private key");
-            dest = pwallet->GetPrimaryDestination();
-        #else
-            throw JSONRPCError(RPC_WALLET_NOT_FOUND, "Require generate destination address or private key");
-        #endif
-        } else {
-            dest = DecodeDestination(generateTo);
-            if (!boost::get<ScriptHash>(&dest)) {
-                // Maybe privkey
-                CKey key = DecodeSecret(generateTo);
-                if (!key.IsValid()) {
-                    throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid generate destination address or private key");
-                } else {
-                    privKey = std::make_shared<CKey>(key);
-                    // P2SH-Segwit
-                    CKeyID keyid = privKey->GetPubKey().GetID();
-                    CTxDestination segwit = WitnessV0KeyHash(keyid);
-                    dest = ScriptHash(GetScriptForDestination(segwit));
-                }
-            }
-        }
-        if (!boost::get<ScriptHash>(&dest))
-            throw JSONRPCError(RPC_INVALID_REQUEST, "Invalid Qitcoin address");
-
-        // Check bind
-        if (miningBlockIndex.nHeight + 1 >= params.nBindPlotterCheckHeight) {
-            const CAccountID accountID = ExtractAccountID(dest);
-            if (accountID.IsNull())
-                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Qitcoin address");
-            if (!::ChainstateActive().CoinsTip().AccountHaveActiveBindPlotter(accountID, block.nPlotterId))
-                throw JSONRPCError(RPC_INVALID_REQUEST,
-                    strprintf("%" PRIu64 " with %s not active bind", block.nPlotterId, EncodeDestination(dest)));
-        }
-
-        // Update private key for signature. Pre-set
-        if (miningBlockIndex.nHeight > 1) {
-            uint64_t destId = boost::get<ScriptHash>(&dest)->GetUint64(0);
-
-            // From cache
-            if (!privKey && mapSignaturePrivKeys.count(destId))
-                privKey = mapSignaturePrivKeys[destId];
-
-            // From wallets
-        #ifdef ENABLE_WALLET
-            if (!privKey) {
-                for (auto pwallet : GetWallets()) {
-                    CKeyID keyid = GetKeyForDestination(*pwallet, dest);
-                    if (!keyid.IsNull()) {
-                        CKey key;
-                        if (pwallet->GetKey(keyid, key)) {
-                            privKey = std::make_shared<CKey>(key);
-                            break;
-                        }
-                    }
-                }
-            }
-        #endif
-
-            if (!privKey)
-                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY,
-                    strprintf("Please pre-set %s private key for mining-sign.", EncodeDestination(dest)));
-
-            if (!mapSignaturePrivKeys.count(destId))
-                mapSignaturePrivKeys[destId] = privKey;
-        }
-
-        // Update best
-        GeneratorState &generatorState = mapGenerators[miningBlockIndex.GetNextGenerationSignature().GetUint64(0)];
-        generatorState.best      = calcUnformattedDeadline;
-        generatorState.height    = miningBlockIndex.nHeight + 1;
-        generatorState.pos       = block.pos;
-        generatorState.plotterId = block.nPlotterId;
-        generatorState.nonce     = block.nNonce;
-        generatorState.dest      = dest;
-        generatorState.privKey   = privKey;
-
-        LogPrint(BCLog::POC, "New best deadline %" PRIu64 ".\n", calcDeadline);
-
-        uiInterface.NotifyBestDeadlineChanged(generatorState.height, generatorState.plotterId, generatorState.nonce, calcDeadline);
-    }
-
-    return calcDeadline;
-}
-
-uint64_t AddNonce(uint64_t& bestDeadline, const CBlockIndex& miningBlockIndex,
-    const uint64_t& nNonce, const uint64_t& nPlotterId, const std::string& generateTo,
-    bool fCheckBind, const Consensus::Params& params)
-{
-    AssertLockHeld(cs_main);
-
-    if (interruptCheckDeadline)
-        throw JSONRPCError(RPC_INVALID_REQUEST, "Not run in mining mode, restart by -server");
-
-    CBlockHeader block;
-    block.nPlotterId = nPlotterId;
-    block.nNonce     = nNonce;
-    return addNonce(bestDeadline, miningBlockIndex, block, generateTo, fCheckBind, params);
-}
-
-uint64_t AddProofOfSpace(uint64_t& bestDeadline, const CBlockIndex& miningBlockIndex,
-    const CChiaProofOfSpace& pos, const std::string& generateTo,
-    bool fCheckBind, const Consensus::Params& params)
-{
-    AssertLockHeld(cs_main);
-
-    if (interruptCheckDeadline)
-        throw JSONRPCError(RPC_INVALID_REQUEST, "Not run in mining mode, restart by -server");
-
-    if (pos.IsNull() || !pos.IsValid())
-        throw JSONRPCError(RPC_INVALID_REQUEST, "Invalid Proof Of Space");
-
-    CBlockHeader block;
-    block.pos = pos;
-    ::pos::VerifyResult result = ::pos::VerifyAndUpdateBlockHeader(block, miningBlockIndex, params);
-    if (result != ::pos::VerifyResult::Success)
-        throw JSONRPCError(RPC_INVALID_REQUEST, strprintf("Apply Proof Of Space: %s", ::pos::ToString(result)));
-    return addNonce(bestDeadline, miningBlockIndex, block, generateTo, fCheckBind, params);
-}
-
 CBlockList GetEvalBlocks(int nHeight, bool fAscent, const Consensus::Params& params)
 {
     AssertLockHeld(cs_main);
@@ -631,24 +471,6 @@ CBlockList GetEvalBlocks(int nHeight, bool fAscent, const Consensus::Params& par
     return vBlocks;
 }
 
-int64_t GetNetCapacity(int nHeight, const Consensus::Params& params)
-{
-    uint64_t nBaseTarget = 0;
-    int nBlockCount = 0;
-    for (const CBlockIndex& block : GetEvalBlocks(nHeight, true, params)) {
-        nBaseTarget += block.nBaseTarget;
-        nBlockCount++;
-    }
-    if (nBlockCount != 0) {
-        nBaseTarget /= nBlockCount;
-        if (nBaseTarget != 0) {
-            return std::max(static_cast<int64_t>(INITIAL_BASE_TARGET / nBaseTarget), (int64_t) 1);
-        }
-    }
-
-    return (int64_t) 1;
-}
-
 static int64_t EvalNetCapacity(int nHeight, const Consensus::Params& params, std::function<void(const CBlockIndex&)> associateBlock)
 {
     uint64_t nBaseTarget = 0;
@@ -669,11 +491,6 @@ static int64_t EvalNetCapacity(int nHeight, const Consensus::Params& params, std
     }
 
     return (int64_t) 1;
-}
-
-int64_t GetNetCapacity(int nHeight, const Consensus::Params& params, std::function<void(const CBlockIndex&)> associateBlock)
-{
-    return EvalNetCapacity(nHeight, params, associateBlock);
 }
 
 CAmount GetMiningPledgeRatio(int nMiningHeight, const Consensus::Params& params)

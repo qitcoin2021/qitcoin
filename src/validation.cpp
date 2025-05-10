@@ -1398,6 +1398,27 @@ uint256 GetSpendEpochHash(const CCoinsViewCache& inputs, const Consensus::Params
     return GetEpochHash(LookupBlockIndex(inputs.GetBestBlock()), params);
 }
 
+uint256 GetStakingPoolStatusHash(const uint256& epochHash)
+{
+    LOCK(cs_main);
+    return GetStakingPoolStatusHash(::ChainstateActive().CoinsTip(), epochHash);
+}
+
+uint256 GetStakingPoolStatusHash(const CCoinsViewCache& inputs, const uint256& epochHash)
+{
+    CDataStream ssValue(SER_GETHASH, 0);
+    ssValue.reserve(32 * 1024 * 1024); // 32MiB
+    for (auto &pool : inputs.GetStakingPools(epochHash)) {
+        ssValue << pool;
+        ssValue << inputs.GetStakingPoolUsers(epochHash, pool.poolID);
+    }
+
+    uint256 result;
+    CSHA256().Write((const unsigned char*) ssValue.data(), ssValue.size())
+             .Finalize((unsigned char*)&result);
+    return result;
+}
+
 CoinsViews::CoinsViews(
     std::string ldb_name,
     size_t cache_size_bytes,

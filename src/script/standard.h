@@ -227,7 +227,7 @@ CAccountID ExtractAccountID(const CTxDestination& dest);
  */
 CTxDestination ExtractDestination(const CAccountID& accountID);
 
-/** opreturn type. See https://qitchain.link/wiki/outtype */
+/** opreturn type. See https://qitchain.net/wiki/outtype */
 enum TxOutType : unsigned int {
     // Range
     TXOUT_TYPE_MIN = 0x0000000f,
@@ -339,9 +339,6 @@ struct StakingPayload : public TxOutPayload
 /** The bind plotter lock amount */
 static const CAmount PROTOCOL_BINDPLOTTER_LOCKAMOUNT = COIN / 10;
 
-/** The height for bind plotter default maximum relative tip height */
-static const int PROTOCOL_BINDPLOTTER_DEFAULTMAXALIVE = 24;
-
 /** The height for bind plotter maximum relative tip height */
 static const int PROTOCOL_BINDPLOTTER_MAXALIVE = 288 * 7;
 
@@ -349,29 +346,8 @@ static const int PROTOCOL_BINDPLOTTER_MAXALIVE = 288 * 7;
 static const int PROTOCOL_BINDPLOTTER_POC_SCRIPTSIZE = 108;
 static const int PROTOCOL_BINDPLOTTER_POS_SCRIPTSIZE = 157;
 
-/** Check whether a string is a valid passphrase. */
-bool IsValidPassphrase(const std::string& passphrase);
-
 /** Check whether a string is a valid plotter ID. */
 bool IsValidPlotterID(const std::string& strPlotterId, uint64_t *id = nullptr);
-
-/** Generate a bind plotter script. */
-CScript GetBindPlotterScriptForDestination(const CTxDestination& dest, const std::string& passphrase, int lastActiveHeight);
-
-/** Generate a bind plotter script. */
-CScript GetBindPlotterScriptForDestination(const CTxDestination& dest, const bls::PrivateKey& farmerPrivateKey, int lastActiveHeight);
-
-/** Check bind plotter script. */
-bool IsBindPlotterScript(const CScript &script);
-
-/** Signature bind plotter script. */
-class CKey;
-CScript SignBindPlotterScript(const CScript &script, const CKey &key);
-
-/** Decode bind plotter script. */
-bool DecodeBindPlotterScript(const CScript &script, uint64_t& plotterId, std::string& pubkeyHex, int& lastActiveHeight);
-bool DecodeBindPlotterScript(const CScript &script, std::map<std::string,std::string> &info);
-uint64_t GetBindPlotterIdFromScript(const CScript &script);
 
 /** The minimal point amount */
 static const CAmount PROTOCOL_POINT_AMOUNT_MIN = 10 * COIN;
@@ -383,8 +359,6 @@ static const int PROTOCOL_POINT_LOCK_BLOCKS_HALF_AMOUNT = 360 * 480;
 
 static const int PROTOCOL_POINT_LOCK_BLOCKS_FULL_AMOUNT = 540 * 480;
 
-/** Generate a point script. */
-CScript GetPointScriptForDestination(const CTxDestination& dest, int lockBlocks);
 /** Get effective point amount. */
 CAmount GetPointAmount(CAmount amount, int lockBlocks);
 
@@ -400,6 +374,7 @@ static const int PROTOCOL_STAKING_LOCK_BLOCKS_FULL_AMOUNT = 540 * 480;
 
 /** Generate staking script. */
 CScript GetStakingScriptForDestination(const CTxDestination& dest, int lockBlocks);
+
 /** Get effective staking amount. */
 CAmount GetStakingAmount(CAmount amount, int lockBlocks);
 

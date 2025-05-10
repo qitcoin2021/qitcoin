@@ -35,7 +35,7 @@ static const arith_uint256 TWO64 = arith_uint256(std::numeric_limits<uint64_t>::
 /**
  * QTC base target when target spacing is 1 seconds
  * 
- * See https://qitchain.link/wiki/The_Proof_of_Capacity#Base_Target
+ * See https://qitchain.net/wiki/The_Proof_of_Capacity#Base_Target
  *
  * net capacity(t) = 4398046511104 / t / baseTarget(t)
  *
@@ -80,39 +80,6 @@ uint64_t CalculateDeadline(const CBlockIndex& prevBlockIndex, const CBlockHeader
 uint64_t CalculateBaseTarget(const CBlockIndex& prevBlockIndex, const CBlockHeader& block, const Consensus::Params& params);
 
 /**
- * Add new nonce
- *
- * @param bestDeadline      Output current best deadline
- * @param miningBlockIndex  Mining block
- * @param nPlotterId        Plot Id
- * @param nNonce            Found nonce
- * @param generateTo        Destination address or private key for block signing
- * @param fCheckBind        Check address and plot bind relation
- * @param params            Consensus params
- *
- * @return Return deadline calc result
- */
-uint64_t AddNonce(uint64_t& bestDeadline, const CBlockIndex& miningBlockIndex,
-    const uint64_t& nPlotterId, const uint64_t& nNonce, const std::string& generateTo,
-    bool fCheckBind, const Consensus::Params& params);
-
-/**
- * Add new Proof of Space
- *
- * @param bestDeadline      Output current best deadline
- * @param miningBlockIndex  Mining block
- * @param pos               Proof of Space
- * @param generateTo        Destination address or private key for block signing
- * @param fCheckBind        Check address and plot bind relation
- * @param params            Consensus params
- *
- * @return Return deadline calc result
- */
-uint64_t AddProofOfSpace(uint64_t& bestDeadline, const CBlockIndex& miningBlockIndex,
-    const CChiaProofOfSpace& pos, const std::string& generateTo,
-    bool fCheckBind, const Consensus::Params& params);
-
-/**
  * Block collection
  */
 typedef std::vector< std::reference_wrapper<const CBlockIndex> > CBlockList;
@@ -125,27 +92,6 @@ typedef std::vector< std::reference_wrapper<const CBlockIndex> > CBlockList;
  * @param params            Consensus params
  */
 CBlockList GetEvalBlocks(int nHeight, bool fAscent, const Consensus::Params& params);
-
-/**
- * Get net capacity
- *
- * @param nHeight           The height of net capacity
- * @param params            Consensus params
- *
- * @return Return net capacity of TB
- */
-int64_t GetNetCapacity(int nHeight, const Consensus::Params& params);
-
-/**
- * Get net capacity
- *
- * @param nHeight           The height of net capacity
- * @param params            Consensus params
- * @param associateBlock    Associate block callback
- *
- * @return Return net capacity of TB
- */
-int64_t GetNetCapacity(int nHeight, const Consensus::Params& params, std::function<void(const CBlockIndex &block)> associateBlock);
 
 /**
  * Get capacity required balance
@@ -211,8 +157,7 @@ CTxDestination AddMiningSignaturePrivkey(const CKey& key);
  */
 std::vector<CTxDestination> GetMiningSignatureAddresses();
 
-/** Utility functions for original PoC legacy. See https://qitchain.link/wiki/poc */
-uint64_t GeneratePlotterId(const std::string &passphrase);
+/** Utility functions for original PoC legacy. See https://qitchain.net/wiki/poc */
 uint64_t ToPlotterId(const unsigned char publicKey[32]);
 
 bool Sign(const std::string &passphrase, const unsigned char data[32], unsigned char signature[64], unsigned char publicKey[32]);

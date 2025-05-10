@@ -277,6 +277,8 @@ const CBlockIndex* GetEpochInitIndex(const CBlockIndex* pindex, const Consensus:
 uint256 GetEpochHash(const CBlockIndex* pindex, const Consensus::Params& consensusParams) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 uint256 GetCurrentEpochHash(const Consensus::Params& consensusParams) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 uint256 GetSpendEpochHash(const CCoinsViewCache& inputs, const Consensus::Params& params);
+uint256 GetStakingPoolStatusHash(const uint256& epochHash) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+uint256 GetStakingPoolStatusHash(const CCoinsViewCache& inputs, const uint256& epochHash);
 
 /** Guess verification progress (as a fraction between 0.0=genesis and 1.0=current tip). */
 double GuessVerificationProgress(const ChainTxData& data, const CBlockIndex* pindex);

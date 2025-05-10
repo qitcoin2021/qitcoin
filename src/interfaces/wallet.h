@@ -181,6 +181,12 @@ public:
     //! Abandon transaction.
     virtual bool abandonTransaction(const uint256& txid) = 0;
 
+    //! Return whether transaction can be removed.
+    virtual bool transactionCanBeRemoved(const uint256& txid) const = 0;
+
+    //! Remove transaction.
+    virtual bool removeTransaction(const uint256& txid) = 0;
+
     //! Return whether transaction can be bumped.
     virtual bool transactionCanBeBumped(const uint256& txid) const = 0;
 
@@ -223,6 +229,17 @@ public:
 
     //! Sign and commit staking pool transaction
     virtual bool signAndCommitStakingPoolTransaction(CMutableTransaction&& mtx, std::vector<std::string>& errors) = 0;
+
+    //! Create staking pool transaction.
+    virtual bool createWithdrawPendingTransaction(const CTxDestination &poolOwnerDest,
+        const CTxDestination &userDest,
+        std::vector<std::string>& errors,
+        CAmount& total,
+        CAmount& total_fee,
+        CMutableTransaction& mtx) = 0;
+
+    //! Sign and commit staking pool transaction
+    virtual bool signAndCommitWithdrawPendingTransaction(CMutableTransaction&& mtx, std::vector<std::string>& errors) = 0;
 
     //! Get a transaction.
     virtual CTransactionRef getTx(const uint256& txid) = 0;

@@ -8,7 +8,6 @@
 #include <crypto/hmac_sha256.h>
 #include <httpserver.h>
 #include <key_io.h>
-#include <poc/poc.h>
 #include <rpc/protocol.h>
 #include <rpc/server.h>
 #include <sync.h>
@@ -223,110 +222,6 @@ static bool HTTPReq_JSONRPC(HTTPRequest* req, const std::string &)
     return true;
 }
 
-static bool AdjustSubmitNonceParam(JSONRPCRequest& jreq, HTTPRequest* req, const std::map<std::string, std::string>& parameters)
-{
-    const auto secretPhrase = parameters.find("secretPhrase");
-    const auto plotterId = parameters.find("accountId");
-    const auto nonce = parameters.find("nonce");
-    const auto height = parameters.find("height");
-    const auto address = parameters.find("address");
-    const auto checkBind = parameters.find("checkBind");
-
-    if (nonce != parameters.cend()) {
-        jreq.params.pushKV("nonce", nonce->second);
-    } else {
-        PoCJSONErrorReply(req, 1, "Incorrect request");
-        return false;
-    }
-
-    if (plotterId != parameters.cend() && !plotterId->second.empty()) {
-        jreq.params.pushKV("plotterId", plotterId->second);
-    } else if (secretPhrase != parameters.cend() && !secretPhrase->second.empty()) {
-        // secretPhrase to plotterId
-        jreq.params.pushKV("plotterId", poc::GeneratePlotterId(secretPhrase->second));
-    } else {
-        PoCJSONErrorReply(req, 1, "Incorrect request");
-        return false;
-    }
-
-    // Other optional parameters
-    if (height != parameters.cend())
-        jreq.params.pushKV("height", height->second);
-    if (address != parameters.cend())
-        jreq.params.pushKV("address", address->second);
-    if (checkBind != parameters.cend())
-        jreq.params.pushKV("checkBind", checkBind->second);
-
-    return true;
-}
-
-static bool HTTPReq_PoCJSONRPC(HTTPRequest* req, const std::string &)
-{
-    JSONRPCRequest jreq;
-    try {
-        // Parse request
-        const std::map<std::string,std::string> parameters = req->GetParameters();
-        const auto requestType = parameters.find("requestType");
-        if (requestType == parameters.cend()) {
-            LogPrintf("Not find requestType, threadid=%ld \n", std::this_thread::get_id());
-            PoCJSONErrorReply(req, 1, "Incorrect request");
-            return false;
-        }
-        // getMiningInfo support GET
-        if (req->GetRequestMethod() != HTTPRequest::POST && (requestType->second != "getMiningInfo" || req->GetRequestMethod() != HTTPRequest::GET)) {
-            LogPrintf("The uri: %s\n", req->GetURI().c_str());
-            req->WriteReply(HTTP_BAD_METHOD, "JSONRPC server handles only POST requests");
-            return false;
-        }
-        const time_t startTime = ::time(nullptr);
-
-        // Set the request
-        jreq.URI = req->GetURI();
-        jreq.params.setObject();
-        if (requestType->second == "submitNonce") {
-            jreq.strMethod = requestType->second;
-            if (!AdjustSubmitNonceParam(jreq, req, parameters))
-                return false;
-        } 
-        else {
-            jreq.strMethod = requestType->second;
-            for (auto it = parameters.cbegin(); it != parameters.cend(); it++) {
-                if (it->first == "requestType") {
-                    continue;
-                }
-                jreq.params.pushKV(it->first, it->second);
-            }
-        }
-
-        // Call
-        UniValue result = tableRPC.execute(jreq);
-        if (result.isBool()) {
-            if (result.isFalse()) {
-                PoCJSONErrorReply(req, 1, "Incorrect request");
-                return false;
-            } else {
-                result.setObject();
-            }
-        } else if (result.isNull() || !result.isObject()) {
-            PoCJSONErrorReply(req, 1, "Incorrect request");
-            return false;
-        }
-
-        result.pushKV("requestProcessingTime", UniValue((int64_t)(::time(nullptr) - startTime)));
-
-        // Send reply
-        req->WriteHeader("Content-Type", "application/json; charset=UTF-8");
-        req->WriteReply(HTTP_OK, result.write());
-    } catch (const UniValue& objError) {
-        JSONErrorReply(req, objError, jreq.id);
-        return false;
-    } catch (const std::exception& e) {
-        JSONErrorReply(req, JSONRPCError(RPC_PARSE_ERROR, e.what()), jreq.id);
-        return false;
-    }
-    return true;
-}
-
 static bool InitRPCAuthentication()
 {
     if (gArgs.GetArg("-rpcpassword", "") == "")
@@ -359,7 +254,6 @@ bool StartHTTPRPC()
     if (g_wallet_init_interface.HasWalletSupport()) {
         RegisterHTTPHandler("/wallet/", false, HTTPReq_JSONRPC);
     }
-    RegisterHTTPHandler("/burst", false, HTTPReq_PoCJSONRPC);
     struct event_base* eventBase = EventBase();
     assert(eventBase);
     httpRPCTimerInterface = MakeUnique<HTTPRPCTimerInterface>(eventBase);
@@ -379,7 +273,6 @@ void StopHTTPRPC()
     if (g_wallet_init_interface.HasWalletSupport()) {
         UnregisterHTTPHandler("/wallet/", false);
     }
-    UnregisterHTTPHandler("/burst", false);
     if (httpRPCTimerInterface) {
         RPCUnsetTimerInterface(httpRPCTimerInterface.get());
         httpRPCTimerInterface.reset();

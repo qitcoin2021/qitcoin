@@ -11,18 +11,6 @@
 
 namespace poc {
 
-uint64_t GeneratePlotterId(const std::string &passphrase)
-{
-    // 1.passphraseHash = sha256(passphrase)
-    // 2.<signingKey,publicKey> = Curve25519(passphraseHash)
-    // 3.publicKeyHash = sha256(publicKey)
-    // 4.unsigned int64 id = unsigned int64(publicKeyHash[0~7])
-    uint8_t privateKey[32] = {0}, publicKey[32] = {0};
-    CSHA256().Write((const unsigned char*)passphrase.data(), (size_t)passphrase.length()).Finalize(privateKey);
-    crypto::curve25519_kengen(publicKey, nullptr, privateKey);
-    return ToPlotterId(publicKey);
-}
-
 uint64_t ToPlotterId(const unsigned char publicKey[32])
 {
     uint8_t publicKeyHash[32] = {0};

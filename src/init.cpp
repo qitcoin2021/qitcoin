@@ -611,7 +611,7 @@ void SetupServerArgs()
 std::string LicenseInfo()
 {
     const std::string URL_SOURCE_CODE = "<https://github.com/qitcoin2021/qitcoin>";
-    const std::string URL_WEBSITE = "<https://qitchain.link>";
+    const std::string URL_WEBSITE = "<https://qitchain.net>";
 
     return CopyrightHolders(_("Copyright (C) %s").translated) + "\n" +
            "\n" +
@@ -1662,6 +1662,8 @@ bool AppInitMain(InitInterfaces& interfaces)
                     // Verify by checkpoints
                     if (!chainparams.Checkpoints().mapCheckpoints.empty()) {
                         const MapCheckpoints &mapCheckpoints = chainparams.Checkpoints().mapCheckpoints;
+                        const MapCheckpoints &mapPoolStatusCheckpoints = chainparams.Checkpoints().mapPoolStatusCheckpoints;
+
                         CBlockIndex *pBeginResetIndex = nullptr;
                         {
                             LOCK(cs_main);
@@ -1721,10 +1723,47 @@ bool AppInitMain(InitInterfaces& interfaces)
                                 if (!InvalidateBlock(state, chainparams, pindex) || !ActivateBestChain(state, chainparams)) {
                                     LogPrintf("%s: %s\n", __func__, FormatStateMessage(state));
                                     strLoadError = _("Error initializing block database").translated;
-                                    break;
                                 }
+                                break;
                             } else {
                                 it++;
+                            }
+                        }
+                        if (!mapPoolStatusCheckpoints.empty()) {
+                            bool fRequireReset = false;
+                            CBlockIndex *pprevValidEpochIndex = nullptr;
+                            for (auto it = mapPoolStatusCheckpoints.cbegin(); it != mapPoolStatusCheckpoints.cend() && it->first <= ::ChainActive().Height();) {
+                                CBlockIndex *pindex = ::ChainActive()[it->first];
+                                if (GetStakingPoolStatusHash(*(pindex->phashBlock)) != it->second) {
+                                    // Invalid
+                                    fRequireReset = true;
+                                    break;
+                                } else {
+                                    pprevValidEpochIndex = pindex;
+                                    it++;
+                                }
+                            }
+                            if (fRequireReset) {
+                                // Re-update staking pools
+                                if (!pprevValidEpochIndex)
+                                    pprevValidEpochIndex = ::ChainActive()[chainparams.GetConsensus().nSaturnActiveHeight - 1];
+
+                                CValidationState state;
+                                if (!InvalidateBlock(state, chainparams, pprevValidEpochIndex)) {
+                                    LogPrintf("%s: %s\n", __func__, FormatStateMessage(state));
+                                    strLoadError = _("Error initializing block database").translated;
+                                } else {
+                                    // Rescan
+                                    {
+                                        LOCK(cs_main);
+                                        ResetBlockFailureFlags(pprevValidEpochIndex);
+                                    }
+                                    CValidationState state;
+                                    if (!ActivateBestChain(state, chainparams)) {
+                                        LogPrintf("%s: %s\n", __func__, FormatStateMessage(state));
+                                        strLoadError = _("Error initializing block database").translated;
+                                    }
+                                }
                             }
                         }
                         if (!strLoadError.empty())
